@@ -1,0 +1,12 @@
+.vercel
+node_modules
+.env
+.env.local
+.env.*.local
+*.local
+dist
+cache
+artifacts
+*.log
+.DS_Store
+node_modules

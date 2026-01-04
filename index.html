@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Tap That Mosquito! 🦟</title>
+    <meta name="description"
+        content="A fun pixel art mosquito tapping game. Tap as many mosquitoes as you can in 60 seconds!">
+
+    <!-- Base Mini App Embed Metadata -->
+    <meta name="fc:miniapp" content='{
+      "version": "next",
+      "imageUrl": "https://neon-shuttle.vercel.app/og.png",
+      "button": {
+        "title": "Play Now",
+        "action": {
+          "type": "launch_miniapp",
+          "name": "Tap That Mosquito",
+          "url": "https://neon-shuttle.vercel.app",
+          "splashImageUrl": "https://neon-shuttle.vercel.app/splash.png",
+          "splashBackgroundColor": "#0a0a0f"
+        }
+      }
+    }' />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div class="game-container">
+        <!-- Header with score and timer -->
+        <header class="game-header">
+            <div class="score-display">
+                <span class="label">SCORE</span>
+                <span id="score" class="value">0</span>
+            </div>
+            <div class="timer-display">
+                <span class="label">TIME</span>
+                <span id="timer" class="value">60</span>
+            </div>
+            <div class="wallet-display">
+                <button id="wallet-btn" class="wallet-btn" title="Connect Wallet">
+                    <span id="wallet-text">🔗</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main play area -->
+        <main id="play-area" class="play-area">
+            <!-- Mosquitoes spawn here -->
+        </main>
+
+        <!-- Start Screen -->
+        <div id="start-screen" class="overlay">
+            <div class="overlay-content">
+                <h1 class="game-title">TAP THAT<br>MOSQUITO!</h1>
+                <div class="mosquito-icon">🦟</div>
+                <p class="instructions">Tap mosquitoes before they escape!</p>
+                <p class="sub-instructions">60 seconds • Combo bonus</p>
+
+                <!-- Wallet Connection Status -->
+                <div id="wallet-status" class="wallet-status disconnected">
+                    <span id="wallet-status-icon">🔗</span>
+                    <span id="wallet-status-text">Connect Wallet</span>
+                </div>
+
+                <div class="start-buttons">
+                    <button id="start-btn" class="pixel-btn">SOLO GAME</button>
+                    <button id="versus-btn" class="pixel-btn versus-btn">⚔️ VERSUS</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Versus Challenge Screen -->
+        <div id="versus-screen" class="overlay hidden">
+            <div class="overlay-content versus-content">
+                <h2 class="versus-title">⚔️ VERSUS MODE</h2>
+                <p class="versus-subtitle">Challenge a friend to battle!</p>
+
+                <div class="challenge-options">
+                    <div class="challenge-option">
+                        <h3>📤 Create Challenge</h3>
+                        <input type="text" id="opponent-address" class="address-input"
+                            placeholder="Enter opponent's address (0x...)" />
+                        <button id="create-challenge-btn" class="action-btn">SEND CHALLENGE</button>
+                    </div>
+
+                    <div class="divider">OR</div>
+
+                    <div class="challenge-option">
+                        <h3>📥 Pending Challenges</h3>
+                        <div id="pending-challenges" class="pending-list">
+                            <p class="no-challenges">No pending challenges</p>
+                        </div>
+                    </div>
+                </div>
+
+                <button id="back-to-menu-btn" class="pixel-btn small">← BACK</button>
+            </div>
+        </div>
+
+        <!-- Versus Waiting Screen -->
+        <div id="versus-waiting" class="overlay hidden">
+            <div class="overlay-content">
+                <h2 class="waiting-title">⏳ WAITING</h2>
+                <div class="waiting-animation">⚔️</div>
+                <p id="waiting-text">Waiting for opponent...</p>
+                <button id="cancel-challenge-btn" class="pixel-btn small">CANCEL</button>
+            </div>
+        </div>
+
+        <!-- Versus Result Screen -->
+        <div id="versus-result-screen" class="overlay hidden">
+            <div class="overlay-content versus-result-content">
+                <h2 id="versus-result-title" class="versus-result-title">🏆 VICTORY!</h2>
+
+                <div class="versus-scores">
+                    <div class="player-score you">
+                        <span class="player-label">YOU</span>
+                        <span id="your-versus-score" class="score-value">0</span>
+                    </div>
+                    <div class="vs-divider">VS</div>
+                    <div class="player-score opponent">
+                        <span class="player-label">OPPONENT</span>
+                        <span id="opponent-versus-score" class="score-value">0</span>
+                    </div>
+                </div>
+
+                <div id="winner-mint-section" class="winner-section">
+                    <p class="winner-text">🎉 You earned a Victory NFT!</p>
+                    <button id="mint-victory-btn" class="action-btn mint-btn">🏆 MINT VICTORY NFT</button>
+                </div>
+
+                <div id="loser-section" class="loser-section hidden">
+                    <p class="loser-text">Better luck next time! 💪</p>
+                </div>
+
+                <div class="versus-result-buttons">
+                    <button id="rematch-btn" class="pixel-btn">REMATCH</button>
+                    <button id="versus-menu-btn" class="pixel-btn small">MENU</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Game Over Screen -->
+        <div id="game-over-screen" class="overlay hidden">
+            <div class="overlay-content game-over-content">
+                <h2 class="game-over-title">TIME'S UP!</h2>
+
+                <!-- Achievement Badge -->
+                <div id="achievement-badge" class="achievement-badge">
+                    <span id="achievement-icon">🎖️</span>
+                    <span id="achievement-name">Beginner</span>
+                </div>
+
+                <div class="final-score">
+                    <span class="label">FINAL SCORE</span>
+                    <span id="final-score" class="value">0</span>
+                </div>
+
+                <div id="rank-display" class="rank-display hidden">
+                    <span>RANK #</span><span id="player-rank">1</span>
+                </div>
+
+                <div id="new-highscore" class="new-highscore hidden">🏆 NEW RECORD! 🏆</div>
+
+                <div class="stats">
+                    <div class="stat">
+                        <span class="stat-label">Tapped</span>
+                        <span id="tapped-count" class="stat-value">0</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Escaped</span>
+                        <span id="escaped-count" class="stat-value">0</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-label">Best Combo</span>
+                        <span id="best-combo" class="stat-value">x1</span>
+                    </div>
+                </div>
+
+                <!-- Leaderboard -->
+                <div class="leaderboard-section">
+                    <h3 class="leaderboard-title">🏆 LEADERBOARD</h3>
+                    <div id="leaderboard-list" class="leaderboard-list">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="game-over-buttons">
+                    <button id="mint-btn" class="action-btn mint-btn hidden">🎖️ MINT NFT</button>
+                    <button id="share-btn" class="action-btn share-btn">📢 SHARE</button>
+                    <button id="restart-btn" class="pixel-btn">PLAY AGAIN</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Combo indicator -->
+        <div id="combo-indicator" class="combo-indicator hidden">
+            <span id="combo-text">x2 COMBO!</span>
+        </div>
+
+        <!-- Sound toggle -->
+        <button id="sound-toggle" class="sound-toggle" title="Toggle Sound">
+            <span id="sound-icon">🔊</span>
+        </button>
+    </div>
+
+    <script type="module" src="game.js"></script>
+</body>
+
+</html>

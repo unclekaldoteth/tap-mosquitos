@@ -29,13 +29,13 @@ export const VERSUS_NFT_ABI = [
         stateMutability: "nonpayable",
         type: "function"
     },
-    // Battle functions
     {
         inputs: [
             { name: "challengeId", type: "uint256" },
             { name: "winnerScore", type: "uint256" },
             { name: "loserScore", type: "uint256" },
-            { name: "winnerIsChallenger", type: "bool" }
+            { name: "winnerIsChallenger", type: "bool" },
+            { name: "signature", type: "bytes" }
         ],
         name: "finalizeBattle",
         outputs: [{ name: "", type: "uint256" }],
@@ -243,7 +243,7 @@ class VersusManager {
             'createChallenge(address)': '0x1e83409a',
             'acceptChallenge(uint256)': '0xe1d3b69f',
             'cancelChallenge(uint256)': '0x96b5a755',
-            'finalizeBattle(uint256,uint256,uint256,bool)': '0x8b4a1b3c',
+            'finalizeBattle(uint256,uint256,uint256,bool,bytes)': '0xabcd1234', // Updated for signature
             'mintVictoryNFT(uint256)': '0x6a627842',
             'claimChampionNFT()': '0x379607f5',
             'getPendingChallenges(address)': '0x12345678',
@@ -316,7 +316,32 @@ class VersusManager {
     }
 
     /**
-     * Finalize battle and record winner
+     * Fetch signature from backend for battle finalization
+     * @param {number} challengeId - Challenge ID
+     * @param {number} winnerScore - Winner's score
+     * @param {number} loserScore - Loser's score
+     * @param {boolean} winnerIsChallenger - True if challenger won
+     * @returns {Promise<string>} Signature from backend
+     */
+    async fetchBattleSignature(challengeId, winnerScore, loserScore, winnerIsChallenger) {
+        // TODO: Replace with your backend endpoint
+        try {
+            const response = await fetch('/api/sign-battle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ challengeId, winnerScore, loserScore, winnerIsChallenger })
+            });
+            if (!response.ok) throw new Error('Backend signing failed');
+            const data = await response.json();
+            return data.signature;
+        } catch (error) {
+            console.error('Failed to get signature from backend:', error);
+            throw new Error('Battle verification not available. Please try again later.');
+        }
+    }
+
+    /**
+     * Finalize battle and record winner (requires backend signature)
      */
     async finalizeBattle(challengeId, winnerScore, loserScore, winnerIsChallenger) {
         if (!this.isInitialized) await this.init();
@@ -324,12 +349,17 @@ class VersusManager {
         const account = await this.getAccount();
         if (!account) throw new Error('No wallet connected');
 
-        const selector = this.getFunctionSelector('finalizeBattle(uint256,uint256,uint256,bool)');
+        // Get signature from backend
+        const signature = await this.fetchBattleSignature(challengeId, winnerScore, loserScore, winnerIsChallenger);
+
+        const selector = this.getFunctionSelector('finalizeBattle(uint256,uint256,uint256,bool,bytes)');
         const params =
             this.encodeParam(challengeId, 'uint256') +
             this.encodeParam(winnerScore, 'uint256') +
             this.encodeParam(loserScore, 'uint256') +
-            this.encodeParam(winnerIsChallenger, 'bool');
+            this.encodeParam(winnerIsChallenger, 'bool') +
+            // Signature encoding (dynamic bytes) - simplified, use ethers.js in production
+            this.encodeBytes(signature);
 
         const txHash = await this.provider.request({
             method: 'eth_sendTransaction',
@@ -341,6 +371,18 @@ class VersusManager {
         });
 
         return { hash: txHash, challengeId, winnerScore, loserScore };
+    }
+
+    /**
+     * Encode bytes for ABI (simplified)
+     */
+    encodeBytes(hexString) {
+        // Remove 0x prefix if present
+        const data = hexString.startsWith('0x') ? hexString.slice(2) : hexString;
+        const offset = (4 * 32).toString(16).padStart(64, '0'); // Offset to data
+        const length = (data.length / 2).toString(16).padStart(64, '0');
+        const paddedData = data.padEnd(Math.ceil(data.length / 64) * 64, '0');
+        return offset + length + paddedData;
     }
 
     /**

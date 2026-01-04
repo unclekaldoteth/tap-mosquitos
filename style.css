@@ -1175,3 +1175,220 @@ body {
 .champion-btn:hover {
     box-shadow: 0 6px 0 #b8860b, 0 0 20px rgba(245, 175, 25, 0.4);
 }
+
+/* ============================================
+   CHALLENGE SYSTEM STYLES
+   ============================================ */
+
+/* Bee Hazard */
+.mosquito-bee::before {
+    content: '🐝';
+}
+
+.mosquito-bee {
+    filter: drop-shadow(0 0 10px #ffcc00);
+}
+
+/* Skull Hazard */
+.mosquito-skull::before {
+    content: '💀';
+}
+
+.mosquito-skull {
+    filter: drop-shadow(0 0 12px #ff4444);
+    animation: fly 0.2s ease-in-out infinite alternate;
+}
+
+/* Hazard tapped animation */
+.hazard-tapped {
+    animation: hazard-shake 0.3s ease forwards !important;
+}
+
+@keyframes hazard-shake {
+
+    0%,
+    100% {
+        transform: translateX(0) scale(1);
+    }
+
+    20% {
+        transform: translateX(-8px) scale(1.1);
+    }
+
+    40% {
+        transform: translateX(8px) scale(1.1);
+    }
+
+    60% {
+        transform: translateX(-4px) scale(0.9);
+    }
+
+    80% {
+        transform: translateX(4px) scale(0.5);
+    }
+
+    100% {
+        transform: translateX(0) scale(0);
+        opacity: 0;
+    }
+}
+
+/* Penalty Score Popup */
+.score-popup.penalty {
+    color: #ff4444;
+    font-size: 18px;
+    text-shadow:
+        2px 2px 0 var(--bg-dark),
+        0 0 15px rgba(255, 68, 68, 0.8);
+}
+
+/* Avoidance Bonus Popup */
+.score-popup.avoidance {
+    color: #00ddff;
+    font-size: 14px;
+    text-shadow:
+        2px 2px 0 var(--bg-dark),
+        0 0 15px rgba(0, 221, 255, 0.8);
+}
+
+/* Swarm Warning */
+.swarm-warning {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 16px;
+    color: #ffaa00;
+    text-shadow:
+        2px 2px 0 var(--bg-dark),
+        0 0 20px rgba(255, 170, 0, 0.8);
+    z-index: 100;
+    animation: swarm-pulse 0.3s ease 5;
+    font-family: 'Press Start 2P', cursive;
+    background: rgba(0, 0, 0, 0.7);
+    padding: 12px 24px;
+    border: 3px solid #ffaa00;
+    border-radius: 8px;
+}
+
+/* Level 2: Big Swarm */
+.swarm-warning.level-2 {
+    font-size: 18px;
+    color: #ff6600;
+    border-color: #ff6600;
+    text-shadow: 2px 2px 0 var(--bg-dark), 0 0 25px rgba(255, 102, 0, 0.8);
+}
+
+/* Level 3: Mega Swarm */
+.swarm-warning.level-3 {
+    font-size: 20px;
+    color: #ff0044;
+    border-color: #ff0044;
+    text-shadow: 2px 2px 0 var(--bg-dark), 0 0 30px rgba(255, 0, 68, 0.9);
+    animation: swarm-pulse 0.2s ease infinite, mega-glow 0.5s ease infinite;
+}
+
+@keyframes mega-glow {
+
+    0%,
+    100% {
+        box-shadow: 0 0 20px rgba(255, 0, 68, 0.5);
+    }
+
+    50% {
+        box-shadow: 0 0 40px rgba(255, 0, 68, 0.9);
+    }
+}
+
+@keyframes swarm-pulse {
+
+    0%,
+    100% {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+
+    50% {
+        transform: translate(-50%, -50%) scale(1.1);
+        opacity: 0.7;
+    }
+}
+
+/* Swarm Active - Play Area Border Flash */
+.play-area.swarm-active {
+    animation: border-flash 0.5s ease infinite;
+}
+
+@keyframes border-flash {
+
+    0%,
+    100% {
+        box-shadow: inset 0 0 0 4px transparent;
+    }
+
+    50% {
+        box-shadow: inset 0 0 0 4px rgba(255, 68, 68, 0.6);
+    }
+}
+
+/* Multiplier Badge */
+.multiplier-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    padding: 6px 14px;
+    background: linear-gradient(135deg, #00ff88, #00cc6a);
+    border-radius: 20px;
+    font-family: 'Press Start 2P', cursive;
+    font-size: 12px;
+    color: var(--bg-dark);
+    font-weight: bold;
+    z-index: 50;
+    box-shadow: 0 2px 0 var(--primary-dim), 0 0 15px var(--shadow-glow);
+    animation: multiplier-pop 0.3s ease;
+}
+
+.multiplier-badge.hidden {
+    display: none;
+}
+
+.multiplier-badge.x2 {
+    background: linear-gradient(135deg, #3b82f6, #2563eb);
+    color: white;
+    box-shadow: 0 2px 0 #1d4ed8, 0 0 15px rgba(59, 130, 246, 0.5);
+}
+
+.multiplier-badge.x3 {
+    background: linear-gradient(135deg, #a855f7, #7c3aed);
+    color: white;
+    box-shadow: 0 2px 0 #6d28d9, 0 0 15px rgba(168, 85, 247, 0.5);
+    animation: multiplier-pop 0.3s ease, multiplier-glow 1s ease infinite;
+}
+
+@keyframes multiplier-pop {
+    0% {
+        transform: scale(0.5);
+        opacity: 0;
+    }
+
+    50% {
+        transform: scale(1.2);
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+@keyframes multiplier-glow {
+
+    0%,
+    100% {
+        box-shadow: 0 2px 0 #6d28d9, 0 0 15px rgba(168, 85, 247, 0.5);
+    }
+
+    50% {
+        box-shadow: 0 2px 0 #6d28d9, 0 0 25px rgba(168, 85, 247, 0.8);
+    }
+}

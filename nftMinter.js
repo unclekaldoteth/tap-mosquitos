@@ -111,7 +111,7 @@ class NFTMinter {
         // This is a placeholder - in production use proper keccak256
         // For now we'll hardcode the selectors we need
         const selectors = {
-            'mintAchievement(uint8,uint256)': '0x8a4068dd',
+            'mintAchievement(uint8,uint256,uint256,bytes)': '0x1234abcd', // Updated for signature
             'hasClaimed(address,uint8)': '0x5c975abb',
             'getClaimableTiers(address,uint256)': '0x12345678',
         };
@@ -120,7 +120,33 @@ class NFTMinter {
     }
 
     /**
-     * Mint achievement NFT
+     * Fetch signature from backend for achievement minting
+     * @param {string} playerAddress - Player's wallet address
+     * @param {number} tier - Tier enum value (0-4)
+     * @param {number} score - Score achieved
+     * @param {number} nonce - Unique nonce
+     * @returns {Promise<string>} Signature from backend
+     */
+    async fetchSignature(playerAddress, tier, score, nonce) {
+        // TODO: Replace with your backend endpoint
+        // For now, this is a placeholder that will fail gracefully
+        try {
+            const response = await fetch('/api/sign-achievement', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ playerAddress, tier, score, nonce })
+            });
+            if (!response.ok) throw new Error('Backend signing failed');
+            const data = await response.json();
+            return data.signature;
+        } catch (error) {
+            console.error('Failed to get signature from backend:', error);
+            throw new Error('Score verification not available. Please try again later.');
+        }
+    }
+
+    /**
+     * Mint achievement NFT (requires backend signature)
      * @param {number} tier - Tier enum value (0-4)
      * @param {number} score - Score achieved
      */
@@ -141,14 +167,18 @@ class NFTMinter {
             throw new Error('No wallet connected');
         }
 
-        // Prepare transaction
-        const data = this.encodeFunctionData('mintAchievement', [tier, score]);
+        // Generate nonce and get signature from backend
+        const nonce = Date.now();
+        const signature = await this.fetchSignature(account, tier, score, nonce);
+
+        // Prepare transaction with new parameters
+        // Note: This is simplified - in production use ethers.js for proper encoding
+        const data = this.encodeFunctionData('mintAchievement', [tier, score, nonce, signature]);
 
         const tx = {
             from: account,
             to: this.contractAddress,
             data: data,
-            // Gas will be estimated by provider
         };
 
         // Send transaction

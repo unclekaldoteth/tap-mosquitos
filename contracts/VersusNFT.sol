@@ -5,14 +5,19 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /**
  * @title VersusNFT
  * @dev Victory Trophy NFTs for "Tap That Mosquito" versus mode
  * Only winners can mint NFTs after a battle
  */
-contract VersusNFT is ERC721, Ownable {
+contract VersusNFT is ERC721, Ownable, ReentrancyGuard {
     using Strings for uint256;
+    using ECDSA for bytes32;
+    using MessageHashUtils for bytes32;
 
     // Challenge status
     enum ChallengeStatus { Pending, Accepted, Completed, Cancelled }
@@ -60,6 +65,14 @@ contract VersusNFT is ERC721, Ownable {
     // Victory tiers based on win streak
     uint256 public constant CHAMPION_WINS_REQUIRED = 5;
 
+    // Security limits
+    uint256 public constant MAX_ACTIVE_CHALLENGES = 100;
+    uint256 public constant CHALLENGE_TIMEOUT = 7 days;
+
+    // Trusted signer for game result verification
+    address public trustedSigner;
+    mapping(bytes32 => bool) public usedSignatures;
+
     // Events
     event ChallengeCreated(uint256 indexed challengeId, address indexed challenger, address indexed opponent);
     event ChallengeAccepted(uint256 indexed challengeId, address indexed opponent);
@@ -67,8 +80,12 @@ contract VersusNFT is ERC721, Ownable {
     event BattleFinalized(uint256 indexed battleId, address indexed winner, address indexed loser, uint256 winnerScore, uint256 loserScore);
     event VictoryNFTMinted(uint256 indexed tokenId, uint256 indexed battleId, address indexed winner);
     event ChampionNFTMinted(uint256 indexed tokenId, address indexed champion);
+    event TrustedSignerUpdated(address indexed oldSigner, address indexed newSigner);
 
-    constructor() ERC721("Mosquito Versus Victory", "MOSQUITO-VS") Ownable(msg.sender) {}
+    constructor(address _trustedSigner) ERC721("Mosquito Versus Victory", "MOSQUITO-VS") Ownable(msg.sender) {
+        require(_trustedSigner != address(0), "Invalid signer");
+        trustedSigner = _trustedSigner;
+    }
 
     /**
      * @dev Create a challenge to a specific opponent
@@ -77,9 +94,12 @@ contract VersusNFT is ERC721, Ownable {
     function createChallenge(address opponent) external returns (uint256) {
         require(opponent != address(0), "Invalid opponent address");
         require(opponent != msg.sender, "Cannot challenge yourself");
+        require(playerChallenges[msg.sender].length < MAX_ACTIVE_CHALLENGES, "Too many active challenges");
 
         uint256 challengeId = _challengeIdCounter;
-        _challengeIdCounter++;
+        unchecked {
+            _challengeIdCounter++;
+        }
 
         challenges[challengeId] = Challenge({
             challenger: msg.sender,
@@ -128,18 +148,21 @@ contract VersusNFT is ERC721, Ownable {
 
     /**
      * @dev Finalize a battle and record the winner
-     * Either player can submit the result (trust client model)
+     * Requires signature from trusted signer to verify game result
      * @param challengeId The challenge ID
      * @param winnerScore Score of the winner
      * @param loserScore Score of the loser
      * @param winnerIsChallenger True if challenger won, false if opponent won
+     * @param signature Backend signature verifying the result
      */
     function finalizeBattle(
         uint256 challengeId,
         uint256 winnerScore,
         uint256 loserScore,
-        bool winnerIsChallenger
+        bool winnerIsChallenger,
+        bytes calldata signature
     ) external returns (uint256) {
+        require(challengeId < _challengeIdCounter, "Invalid challenge ID");
         Challenge storage challenge = challenges[challengeId];
         
         require(challenge.status == ChallengeStatus.Accepted, "Challenge not accepted");
@@ -149,11 +172,24 @@ contract VersusNFT is ERC721, Ownable {
         );
         require(winnerScore > loserScore, "Winner must have higher score");
 
+        // Verify signature from trusted signer
+        bytes32 messageHash = keccak256(abi.encodePacked(
+            challengeId, winnerScore, loserScore, winnerIsChallenger
+        ));
+        bytes32 ethSignedHash = messageHash.toEthSignedMessageHash();
+        
+        require(!usedSignatures[ethSignedHash], "Signature already used");
+        require(ethSignedHash.recover(signature) == trustedSigner, "Invalid signature");
+        
+        usedSignatures[ethSignedHash] = true;
+
         address winner = winnerIsChallenger ? challenge.challenger : challenge.opponent;
         address loser = winnerIsChallenger ? challenge.opponent : challenge.challenger;
 
         uint256 battleId = _battleIdCounter;
-        _battleIdCounter++;
+        unchecked {
+            _battleIdCounter++;
+        }
 
         battles[battleId] = Battle({
             winner: winner,
@@ -184,7 +220,8 @@ contract VersusNFT is ERC721, Ownable {
      * @dev Mint victory NFT (only winner can mint)
      * @param battleId ID of the battle
      */
-    function mintVictoryNFT(uint256 battleId) external returns (uint256) {
+    function mintVictoryNFT(uint256 battleId) external nonReentrant returns (uint256) {
+        require(battleId < _battleIdCounter, "Invalid battle ID");
         Battle storage battle = battles[battleId];
         
         require(battle.winner == msg.sender, "Only winner can mint");
@@ -193,7 +230,9 @@ contract VersusNFT is ERC721, Ownable {
         battle.nftMinted = true;
 
         uint256 tokenId = _tokenIdCounter;
-        _tokenIdCounter++;
+        unchecked {
+            _tokenIdCounter++;
+        }
 
         _safeMint(msg.sender, tokenId);
         tokenBattleId[tokenId] = battleId;
@@ -205,14 +244,16 @@ contract VersusNFT is ERC721, Ownable {
     /**
      * @dev Claim Champion NFT (requires 5+ total wins)
      */
-    function claimChampionNFT() external returns (uint256) {
+    function claimChampionNFT() external nonReentrant returns (uint256) {
         require(totalWins[msg.sender] >= CHAMPION_WINS_REQUIRED, "Need 5+ wins");
         require(!hasClaimedChampion[msg.sender], "Already claimed Champion NFT");
 
         hasClaimedChampion[msg.sender] = true;
 
         uint256 tokenId = _tokenIdCounter;
-        _tokenIdCounter++;
+        unchecked {
+            _tokenIdCounter++;
+        }
 
         _safeMint(msg.sender, tokenId);
         // Battle ID 0 indicates Champion NFT (special case)
@@ -426,21 +467,32 @@ contract VersusNFT is ERC721, Ownable {
     function getPendingChallenges(address player) external view returns (uint256[] memory) {
         uint256[] memory allChallenges = playerChallenges[player];
         uint256 pendingCount = 0;
+        uint256 len = allChallenges.length;
 
         // Count pending
-        for (uint256 i = 0; i < allChallenges.length; i++) {
+        for (uint256 i = 0; i < len;) {
             if (challenges[allChallenges[i]].status == ChallengeStatus.Pending) {
-                pendingCount++;
+                unchecked {
+                    pendingCount++;
+                }
+            }
+            unchecked {
+                ++i;
             }
         }
 
         // Build result array
         uint256[] memory pending = new uint256[](pendingCount);
         uint256 index = 0;
-        for (uint256 i = 0; i < allChallenges.length; i++) {
+        for (uint256 i = 0; i < len;) {
             if (challenges[allChallenges[i]].status == ChallengeStatus.Pending) {
                 pending[index] = allChallenges[i];
-                index++;
+                unchecked {
+                    index++;
+                }
+            }
+            unchecked {
+                ++i;
             }
         }
 
@@ -481,5 +533,18 @@ contract VersusNFT is ERC721, Ownable {
      */
     function totalBattles() external view returns (uint256) {
         return _battleIdCounter;
+    }
+
+    // ============ Admin Functions ============
+
+    /**
+     * @dev Update the trusted signer address
+     * @param _newSigner New signer address
+     */
+    function setTrustedSigner(address _newSigner) external onlyOwner {
+        require(_newSigner != address(0), "Invalid signer address");
+        address oldSigner = trustedSigner;
+        trustedSigner = _newSigner;
+        emit TrustedSignerUpdated(oldSigner, _newSigner);
     }
 }

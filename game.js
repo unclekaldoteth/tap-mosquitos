@@ -105,6 +105,12 @@ class Game {
         this.minSpawnRate = 400;
         this.mosquitoSpeed = { min: 3000, max: 6000 }; // ms to cross screen
 
+        // Challenge system
+        this.comboMultiplier = 1;
+        this.consecutiveTaps = 0;
+        this.isSwarmActive = false;
+        this.swarmTimeouts = [];
+
         // Initialize
         this.init();
     }
@@ -356,6 +362,13 @@ class Game {
         this.lastTapTime = 0;
         this.mosquitoes = [];
 
+        // Reset challenge system
+        this.comboMultiplier = 1;
+        this.consecutiveTaps = 0;
+        this.isSwarmActive = false;
+        this.swarmTimeouts.forEach(t => clearTimeout(t));
+        this.swarmTimeouts = [];
+
         // Clear play area
         this.playArea.innerHTML = '';
 
@@ -364,6 +377,7 @@ class Game {
         this.timerEl.textContent = '60';
         this.timerEl.classList.remove('timer-warning');
         this.hideCombo();
+        this.hideMultiplier();
     }
 
     startTimers() {
@@ -389,6 +403,9 @@ class Game {
 
         // Spawn timer (difficulty increases over time)
         this.scheduleNextSpawn();
+
+        // Schedule swarm events (2-3 random times during game)
+        this.scheduleSwarmEvents();
     }
 
     scheduleNextSpawn() {
@@ -405,11 +422,88 @@ class Game {
         }, spawnRate + Math.random() * 300);
     }
 
-    spawnMosquito() {
+    // ============ SWARM EVENT SYSTEM ============
+
+    scheduleSwarmEvents() {
+        // Schedule 3 swarm events at fixed times with progressive difficulty
+        const swarmTimes = [
+            { time: 12, level: 1 },  // Early game: smaller swarm
+            { time: 28, level: 2 },  // Mid game: medium swarm
+            { time: 45, level: 3 },  // Late game: large swarm
+        ];
+
+        for (const swarm of swarmTimes) {
+            const delay = (swarm.time + Math.random() * 3) * 1000;
+            const timeout = setTimeout(() => this.triggerSwarm(swarm.level), delay);
+            this.swarmTimeouts.push(timeout);
+        }
+    }
+
+    triggerSwarm(level = 1) {
         if (!this.isRunning) return;
 
+        this.isSwarmActive = true;
+        this.currentSwarmLevel = level;
+        this.showSwarmWarning(level);
+        soundManager.playWarning();
+
+        // Progressive spawn count based on level
+        const spawnCounts = { 1: 6, 2: 10, 3: 15 };
+        const count = spawnCounts[level] + Math.floor(Math.random() * 3);
+
+        for (let i = 0; i < count; i++) {
+            setTimeout(() => {
+                if (this.isRunning) {
+                    this.spawnMosquito(true, level);
+                }
+            }, i * 100);
+        }
+
+        // End swarm after 4 seconds
+        setTimeout(() => {
+            this.isSwarmActive = false;
+        }, 4000);
+    }
+
+    showSwarmWarning(level = 1) {
+        const warning = document.createElement('div');
+        warning.className = `swarm-warning level-${level}`;
+
+        const labels = {
+            1: '⚠️ SWARM! ⚠️',
+            2: '⚠️ BIG SWARM! ⚠️',
+            3: '💀 MEGA SWARM! 💀'
+        };
+        warning.innerHTML = labels[level] || labels[1];
+        this.playArea.appendChild(warning);
+
+        // Flash play area border
+        this.playArea.classList.add('swarm-active');
+
+        setTimeout(() => {
+            warning.remove();
+            this.playArea.classList.remove('swarm-active');
+        }, 2000);
+    }
+
+    // ============ SPAWN MOSQUITO (with hazard support) ============
+
+    spawnMosquito(isSwarm = false, swarmLevel = 1) {
+        if (!this.isRunning) return;
+
+        // Determine insect type with progressive hazard chance
+        let type = 'normal';
+        if (isSwarm) {
+            // Hazard chance increases with swarm level: 15%, 25%, 35%
+            const hazardChance = 0.1 + (swarmLevel * 0.08);
+            if (Math.random() < hazardChance) {
+                type = Math.random() < 0.3 ? 'skull' : 'bee';
+            }
+        }
+
         const mosquito = document.createElement('div');
-        mosquito.className = 'mosquito';
+        mosquito.className = `mosquito mosquito-${type}`;
+        mosquito.dataset.type = type;
 
         // Random position
         const areaRect = this.playArea.getBoundingClientRect();
@@ -450,11 +544,14 @@ class Game {
         mosquito.style.left = `${startX}px`;
         mosquito.style.top = `${startY}px`;
 
-        // Calculate speed based on difficulty
+        // Calculate speed based on difficulty (hazards slightly faster)
         const elapsed = 60 - this.timeLeft;
         const difficultyFactor = Math.min(elapsed / 60, 1);
         const speedRange = this.mosquitoSpeed.max - this.mosquitoSpeed.min;
-        const duration = this.mosquitoSpeed.max - speedRange * difficultyFactor * 0.5;
+        let duration = this.mosquitoSpeed.max - speedRange * difficultyFactor * 0.5;
+        if (type !== 'normal') {
+            duration *= 0.85; // Hazards are 15% faster
+        }
         const actualDuration = duration + Math.random() * 1000;
 
         // Animate movement
@@ -464,7 +561,8 @@ class Game {
             startX, startY, endX, endY,
             duration: actualDuration,
             startTime,
-            tapped: false
+            tapped: false,
+            type: type
         };
 
         this.mosquitoes.push(mosquitoData);
@@ -515,9 +613,23 @@ class Game {
         if (data.tapped || !this.isRunning) return;
 
         data.tapped = true;
-        this.tappedCount++;
+        const type = data.type || 'normal';
 
-        // Calculate combo
+        // Handle hazard taps (bee or skull)
+        if (type === 'bee' || type === 'skull') {
+            const penalty = type === 'skull' ? -100 : -50;
+            this.handleHazardTap(data, penalty);
+            return;
+        }
+
+        // Normal mosquito tap
+        this.tappedCount++;
+        this.consecutiveTaps++;
+
+        // Update combo multiplier based on consecutive taps
+        this.updateComboMultiplier();
+
+        // Calculate combo for visual effects
         const now = Date.now();
         if (now - this.lastTapTime < 800) {
             this.currentCombo++;
@@ -529,17 +641,16 @@ class Game {
         }
         this.lastTapTime = now;
 
-        // Calculate score with combo bonus
+        // Calculate score with new multiplier system
         const basePoints = 10;
-        const comboMultiplier = Math.min(this.currentCombo, 10); // Cap at 10x
-        const points = basePoints * comboMultiplier;
+        const points = basePoints * this.comboMultiplier;
 
         this.score += points;
         this.scoreEl.textContent = this.score;
 
         // Show effects
         this.showSplatEffect(data.element);
-        this.showScorePopup(data.element, points, this.currentCombo > 1);
+        this.showScorePopup(data.element, points, this.comboMultiplier > 1);
 
         // Play sounds
         soundManager.playSplat();
@@ -550,6 +661,9 @@ class Game {
         if (this.currentCombo >= 2) {
             this.showCombo(this.currentCombo);
         }
+
+        // Show multiplier badge
+        this.showMultiplier();
 
         // Animate squash
         data.element.classList.add('tapped');
@@ -570,15 +684,127 @@ class Game {
         }, 1500);
     }
 
+    handleHazardTap(data, penalty) {
+        // Apply penalty
+        this.score = Math.max(0, this.score + penalty);
+        this.scoreEl.textContent = this.score;
+
+        // Reset combo multiplier
+        this.consecutiveTaps = 0;
+        this.comboMultiplier = 1;
+        this.currentCombo = 0;
+        this.hideCombo();
+        this.hideMultiplier();
+
+        // Show penalty effect
+        this.showPenaltyEffect(data.element, penalty);
+
+        // Play buzz sound
+        soundManager.playWarning();
+
+        // Animate shake and remove
+        data.element.classList.add('hazard-tapped');
+        setTimeout(() => {
+            if (data.element.parentNode) {
+                data.element.remove();
+            }
+            this.removeMosquitoData(data);
+        }, 300);
+    }
+
+    updateComboMultiplier() {
+        if (this.consecutiveTaps >= 10) {
+            this.comboMultiplier = 3;
+        } else if (this.consecutiveTaps >= 5) {
+            this.comboMultiplier = 2;
+        } else {
+            this.comboMultiplier = 1;
+        }
+    }
+
+    showPenaltyEffect(element, penalty) {
+        const popup = document.createElement('div');
+        popup.className = 'score-popup penalty';
+        popup.textContent = `${penalty}`;
+
+        const rect = element.getBoundingClientRect();
+        const areaRect = this.playArea.getBoundingClientRect();
+
+        popup.style.left = `${rect.left - areaRect.left + rect.width / 2}px`;
+        popup.style.top = `${rect.top - areaRect.top}px`;
+
+        this.playArea.appendChild(popup);
+        setTimeout(() => popup.remove(), 800);
+    }
+
+    showMultiplier() {
+        let badge = document.getElementById('multiplier-badge');
+        if (!badge) {
+            badge = document.createElement('div');
+            badge.id = 'multiplier-badge';
+            badge.className = 'multiplier-badge';
+            this.playArea.appendChild(badge);
+        }
+
+        if (this.comboMultiplier > 1) {
+            badge.textContent = `${this.comboMultiplier}x`;
+            badge.className = `multiplier-badge x${this.comboMultiplier}`;
+            badge.classList.remove('hidden');
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+
+    hideMultiplier() {
+        const badge = document.getElementById('multiplier-badge');
+        if (badge) {
+            badge.classList.add('hidden');
+        }
+    }
+
     mosquitoEscaped(data) {
         if (data.tapped) return;
 
-        this.escapedCount++;
+        const type = data.type || 'normal';
+
+        // Normal mosquito escape = penalty (reset multiplier)
+        if (type === 'normal') {
+            this.escapedCount++;
+
+            // Reset combo multiplier when you miss a normal mosquito
+            this.consecutiveTaps = 0;
+            this.comboMultiplier = 1;
+            this.hideMultiplier();
+        }
+        // Hazard escape = REWARD for resisting temptation!
+        else if (type === 'bee' || type === 'skull') {
+            const bonus = type === 'skull' ? 30 : 20;
+            this.score += bonus;
+            this.scoreEl.textContent = this.score;
+
+            // Show bonus popup
+            this.showAvoidanceBonus(data.element, bonus);
+        }
 
         if (data.element.parentNode) {
             data.element.remove();
         }
         this.removeMosquitoData(data);
+    }
+
+    showAvoidanceBonus(element, bonus) {
+        const popup = document.createElement('div');
+        popup.className = 'score-popup avoidance';
+        popup.textContent = `+${bonus} 🛡️`;
+
+        const rect = element.getBoundingClientRect();
+        const areaRect = this.playArea.getBoundingClientRect();
+
+        popup.style.left = `${rect.left - areaRect.left + rect.width / 2}px`;
+        popup.style.top = `${rect.top - areaRect.top}px`;
+
+        this.playArea.appendChild(popup);
+        setTimeout(() => popup.remove(), 800);
     }
 
     removeMosquitoData(data) {

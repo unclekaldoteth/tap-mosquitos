@@ -2,17 +2,24 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 import "@openzeppelin/contracts/utils/Base64.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /**
  * @title MosquitoSlayerNFT
  * @dev Achievement NFTs for "Tap That Mosquito" game
  * Players can mint NFTs based on their achievement tier
+ * Uses ERC721Enumerable for efficient token enumeration
  */
-contract MosquitoSlayerNFT is ERC721, Ownable {
+contract MosquitoSlayerNFT is ERC721Enumerable, Ownable, ReentrancyGuard {
     using Strings for uint256;
+    using ECDSA for bytes32;
+    using MessageHashUtils for bytes32;
 
     // Achievement tiers
     enum Tier { Common, Uncommon, Rare, Epic, Legendary }
@@ -39,17 +46,43 @@ contract MosquitoSlayerNFT is ERC721, Ownable {
     // Mapping: tokenId => timestamp
     mapping(uint256 => uint256) public tokenTimestamp;
 
+    // Trusted signer for score verification
+    address public trustedSigner;
+    mapping(bytes32 => bool) public usedSignatures;
+
     // Events
     event AchievementMinted(address indexed player, uint256 indexed tokenId, Tier tier, uint256 score);
+    event TrustedSignerUpdated(address indexed oldSigner, address indexed newSigner);
 
-    constructor() ERC721("Mosquito Slayer", "MOSQUITO") Ownable(msg.sender) {}
+    constructor(address _trustedSigner) ERC721("Mosquito Slayer", "MOSQUITO") Ownable(msg.sender) {
+        require(_trustedSigner != address(0), "Invalid signer");
+        trustedSigner = _trustedSigner;
+    }
 
     /**
      * @dev Mint an achievement NFT for a specific tier
      * @param tier The achievement tier to mint
      * @param score The score achieved (must meet tier requirement)
+     * @param nonce Unique nonce to prevent replay attacks
+     * @param signature Backend signature verifying the score
      */
-    function mintAchievement(Tier tier, uint256 score) external {
+    function mintAchievement(
+        Tier tier, 
+        uint256 score,
+        uint256 nonce,
+        bytes calldata signature
+    ) external nonReentrant {
+        // Verify signature from trusted signer
+        bytes32 messageHash = keccak256(abi.encodePacked(
+            msg.sender, tier, score, nonce
+        ));
+        bytes32 ethSignedHash = messageHash.toEthSignedMessageHash();
+        
+        require(!usedSignatures[ethSignedHash], "Signature already used");
+        require(ethSignedHash.recover(signature) == trustedSigner, "Invalid signature");
+        
+        usedSignatures[ethSignedHash] = true;
+
         // Validate score meets tier requirement
         require(_scoreQualifiesForTier(score, tier), "Score does not qualify for this tier");
         
@@ -61,7 +94,9 @@ contract MosquitoSlayerNFT is ERC721, Ownable {
 
         // Mint the NFT
         uint256 tokenId = _tokenIdCounter;
-        _tokenIdCounter++;
+        unchecked {
+            _tokenIdCounter++;
+        }
 
         _safeMint(msg.sender, tokenId);
 
@@ -132,6 +167,7 @@ contract MosquitoSlayerNFT is ERC721, Ownable {
      * @dev Generate SVG for the NFT
      */
     function generateSVG(uint256 tokenId) public view returns (string memory) {
+        require(_ownerOf(tokenId) != address(0), "Token does not exist");
         Tier tier = tokenTier[tokenId];
         uint256 score = tokenScore[tokenId];
         string memory tierName = getTierName(tier);
@@ -211,17 +247,17 @@ contract MosquitoSlayerNFT is ERC721, Ownable {
     }
 
     /**
-     * @dev Get all tokens owned by an address
+     * @dev Get all tokens owned by an address (now using ERC721Enumerable)
+     * Much more gas efficient than iterating through all tokens
      */
     function getPlayerAchievements(address player) external view returns (uint256[] memory) {
         uint256 balance = balanceOf(player);
         uint256[] memory tokens = new uint256[](balance);
-        uint256 index = 0;
 
-        for (uint256 i = 0; i < _tokenIdCounter; i++) {
-            if (_ownerOf(i) == player) {
-                tokens[index] = i;
-                index++;
+        for (uint256 i = 0; i < balance;) {
+            tokens[i] = tokenOfOwnerByIndex(player, i);
+            unchecked {
+                ++i;
             }
         }
 
@@ -229,9 +265,48 @@ contract MosquitoSlayerNFT is ERC721, Ownable {
     }
 
     /**
-     * @dev Total supply of NFTs
+     * @dev Required override for ERC721Enumerable
      */
-    function totalSupply() external view returns (uint256) {
-        return _tokenIdCounter;
+    function _update(address to, uint256 tokenId, address auth)
+        internal
+        override(ERC721Enumerable)
+        returns (address)
+    {
+        return super._update(to, tokenId, auth);
+    }
+
+    /**
+     * @dev Required override for ERC721Enumerable
+     */
+    function _increaseBalance(address account, uint128 value)
+        internal
+        override(ERC721Enumerable)
+    {
+        super._increaseBalance(account, value);
+    }
+
+    /**
+     * @dev Required override for supportsInterface
+     */
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        override(ERC721Enumerable)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
+    }
+
+    // ============ Admin Functions ============
+
+    /**
+     * @dev Update the trusted signer address
+     * @param _newSigner New signer address
+     */
+    function setTrustedSigner(address _newSigner) external onlyOwner {
+        require(_newSigner != address(0), "Invalid signer address");
+        address oldSigner = trustedSigner;
+        trustedSigner = _newSigner;
+        emit TrustedSignerUpdated(oldSigner, _newSigner);
     }
 }

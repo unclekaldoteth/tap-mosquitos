@@ -15,8 +15,18 @@ class NFTMinter {
 
     async init() {
         try {
-            // Get Ethereum provider from SDK
-            this.provider = await sdk.wallet.getEthereumProvider();
+            // Try SDK provider first (Mini App context)
+            try {
+                this.provider = await sdk.wallet.getEthereumProvider();
+            } catch (sdkError) {
+                console.log('SDK provider not available:', sdkError.message);
+            }
+
+            // Fallback to window.ethereum (MetaMask/browser)
+            if (!this.provider && typeof window !== 'undefined' && window.ethereum) {
+                this.provider = window.ethereum;
+                console.log('Using window.ethereum as provider');
+            }
 
             if (!this.provider) {
                 console.log('No Ethereum provider available');
@@ -37,7 +47,7 @@ class NFTMinter {
                 return false;
             }
 
-            if (!this.contractAddress || this.contractAddress === "0x0000000000000000000000000000000000000000") {
+            if (!this.contractAddress || this.contractAddress === "" || this.contractAddress === "0x0000000000000000000000000000000000000000") {
                 console.log('Contract not deployed on this network');
                 return false;
             }

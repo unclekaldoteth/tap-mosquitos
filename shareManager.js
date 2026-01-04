@@ -13,26 +13,60 @@ class ShareManager {
     }
 
     /**
-     * Core share function using Farcaster SDK
+     * Core share function using Farcaster SDK with fallbacks
      */
     async share(text) {
+        const fullText = text + '\n\n' + APP_URL;
+
+        // Try Farcaster SDK first (only works in Mini App)
         try {
-            await sdk.actions.composeCast({
-                text,
-                embeds: [APP_URL],
-            });
-            return true;
-        } catch (error) {
-            console.error('Share failed:', error);
-            // Fallback: copy to clipboard
-            try {
-                await navigator.clipboard.writeText(text + '\n\n' + APP_URL);
-                alert('Copied to clipboard! Paste it in your Farcaster client.');
+            const isInMiniApp = await sdk.isInMiniApp();
+            if (isInMiniApp) {
+                await sdk.actions.composeCast({
+                    text,
+                    embeds: [APP_URL],
+                });
                 return true;
-            } catch {
-                alert('Could not share. Try again in the Base app!');
-                return false;
             }
+        } catch (sdkError) {
+            console.log('SDK composeCast not available:', sdkError.message);
+        }
+
+        // Fallback 1: Web Share API (mobile browsers)
+        if (navigator.share) {
+            try {
+                await navigator.share({
+                    title: 'Tap That Mosquito',
+                    text: text,
+                    url: APP_URL
+                });
+                return true;
+            } catch (shareError) {
+                // User cancelled or share failed
+                if (shareError.name !== 'AbortError') {
+                    console.log('Web Share failed:', shareError.message);
+                }
+            }
+        }
+
+        // Fallback 2: Open Warpcast compose URL
+        try {
+            const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(fullText)}`;
+            window.open(warpcastUrl, '_blank');
+            return true;
+        } catch (warpcastError) {
+            console.log('Warpcast redirect failed:', warpcastError.message);
+        }
+
+        // Fallback 3: Copy to clipboard
+        try {
+            await navigator.clipboard.writeText(fullText);
+            alert('Copied to clipboard! Paste it in your Farcaster client.');
+            return true;
+        } catch (clipboardError) {
+            console.error('Clipboard copy failed:', clipboardError);
+            alert('Could not share. Please copy this text manually:\n\n' + fullText);
+            return false;
         }
     }
 

@@ -174,31 +174,70 @@ class Game {
         try {
             this.isConnecting = true;
             this.walletText.textContent = '...';
+            this.walletStatusText.textContent = 'Connecting...';
 
-            // Try to sign in with Farcaster
-            const result = await sdk.actions.signIn({
-                nonce: this.generateNonce(),
-                acceptAuthAddress: true,
-            });
+            // Try SDK signIn first (works in Mini App)
+            let connected = false;
 
-            if (result?.signature) {
-                // Successfully signed in
-                const address = result.custody || result.fid?.toString() || 'Connected';
+            try {
+                const isInMiniApp = await sdk.isInMiniApp();
+                if (isInMiniApp) {
+                    const result = await sdk.actions.signIn({
+                        nonce: this.generateNonce(),
+                        acceptAuthAddress: true,
+                    });
 
-                // Try to get username from result or fetch it
-                let username = result.username || null;
-                if (!username && address.startsWith('0x')) {
-                    username = await this.fetchFarcasterUsername(address);
+                    if (result?.signature) {
+                        const address = result.custody || result.fid?.toString() || 'Connected';
+                        let username = result.username || null;
+                        if (!username && address.startsWith('0x')) {
+                            username = await this.fetchFarcasterUsername(address);
+                        }
+                        this.setWalletConnected(address, username);
+                        connected = true;
+                    }
                 }
-
-                this.setWalletConnected(address, username);
+            } catch (sdkError) {
+                console.log('SDK signIn not available, trying MetaMask...', sdkError.message);
             }
+
+            // Fallback to MetaMask/window.ethereum
+            if (!connected && typeof window.ethereum !== 'undefined') {
+                try {
+                    // Request account access
+                    const accounts = await window.ethereum.request({
+                        method: 'eth_requestAccounts'
+                    });
+
+                    if (accounts && accounts.length > 0) {
+                        const address = accounts[0];
+                        // Try to get Farcaster username for this address
+                        const username = await this.fetchFarcasterUsername(address);
+                        this.setWalletConnected(address, username);
+                        connected = true;
+                    }
+                } catch (ethError) {
+                    console.error('MetaMask connection failed:', ethError);
+                    if (ethError.code === 4001) {
+                        // User rejected the request
+                        this.showWalletError('Rejected');
+                        return;
+                    }
+                }
+            }
+
+            // No wallet available
+            if (!connected) {
+                alert('No wallet detected. Please install MetaMask or use this app in Farcaster/Warpcast.');
+                this.walletText.textContent = '🔗';
+                this.walletStatusText.textContent = 'Connect Wallet';
+            }
+
         } catch (error) {
             console.error('Wallet connection failed:', error);
-            // Reset button state
             this.walletText.textContent = '🔗';
+            this.walletStatusText.textContent = 'Connect Wallet';
 
-            // Show error feedback
             if (error.message?.includes('rejected')) {
                 this.showWalletError('Rejected');
             } else {

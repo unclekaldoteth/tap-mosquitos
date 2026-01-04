@@ -13,7 +13,11 @@
         "splashBackgroundColor": "#0a0a0f",
         "subtitle": "Tap fast, score high!",
         "description": "A fun pixel art mini game where you tap mosquitoes to score points. Race against the clock in 60-second rounds with combo multipliers!",
-        "screenshotUrls": [],
+        "screenshotUrls": [
+            "https://neon-shuttle.vercel.app/screenshot1.png",
+            "https://neon-shuttle.vercel.app/screenshot2.png",
+            "https://neon-shuttle.vercel.app/screenshot3.png"
+        ],
         "primaryCategory": "games",
         "tags": [
             "game",

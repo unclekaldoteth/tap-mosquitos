@@ -9,6 +9,7 @@ import { leaderboard } from './leaderboard.js';
 import { nftMinter } from './nftMinter.js';
 import { TIER_INFO, Tier } from './contract.js';
 import { versusManager, getVictoryTitle } from './versusContract.js';
+import { shareManager } from './shareManager.js';
 
 class Game {
     constructor() {
@@ -87,6 +88,9 @@ class Game {
         this.opponentAddress = null;
         this.opponentScore = 0; // Simulated for demo
         this.isWinner = false;
+        this.winStreak = 0;
+        this.totalWins = 0;
+        this.previousHighscore = this.highscore;
 
         // Stats
         this.tappedCount = 0;
@@ -606,7 +610,9 @@ class Game {
 
         // Check high score
         const isNewHighscore = this.score > this.highscore;
+        const previousBest = this.previousHighscore;
         if (isNewHighscore) {
+            this.previousHighscore = this.score;
             this.highscore = this.score;
             this.saveHighscore(this.score);
         }
@@ -655,7 +661,50 @@ class Game {
         // Show game over screen
         setTimeout(() => {
             this.gameOverScreen.classList.remove('hidden');
+
+            // Track game played for first game detection
+            const isFirstGame = shareManager.isFirstGame();
+            shareManager.trackGamePlayed();
+
+            // Prompt contextual shares
+            this.promptContextualShares({
+                isFirstGame,
+                isNewHighscore,
+                previousBest,
+                rank,
+                achievement
+            });
         }, 500);
+    }
+
+    // Prompt contextual share options based on achievements
+    async promptContextualShares({ isFirstGame, isNewHighscore, previousBest, rank, achievement }) {
+        // Priority: First Game > New High Score > Leaderboard Rank
+        if (isFirstGame && this.score > 0) {
+            // Prompt first game share after a short delay
+            setTimeout(() => {
+                if (confirm('Great first game! Want to share your score and challenge friends?')) {
+                    shareManager.shareFirstGame({
+                        score: this.score,
+                        combo: this.bestCombo || 1
+                    });
+                }
+            }, 1500);
+        } else if (isNewHighscore && this.score >= 100) {
+            // Store for share button - will offer specific high score share
+            this.pendingHighScoreShare = {
+                score: this.score,
+                previousBest,
+                combo: this.bestCombo || 1,
+                tierName: achievement.name
+            };
+        } else if (rank > 0 && rank <= 10) {
+            // Store for share button - will offer leaderboard rank share  
+            this.pendingRankShare = {
+                rank,
+                score: this.score
+            };
+        }
     }
 
     getAchievementIcon(tier) {
@@ -667,6 +716,18 @@ class Game {
             common: '🥉',
         };
         return icons[tier] || '🎖️';
+    }
+
+    // Get approximate rarity percentage for tier
+    getTierRarity(tier) {
+        const rarities = {
+            4: '0.1',  // Legendary
+            3: '1',    // Epic  
+            2: '5',    // Rare
+            1: '15',   // Uncommon
+            0: null    // Common (no rarity display)
+        };
+        return rarities[tier] || null;
     }
 
     renderLeaderboard() {
@@ -696,30 +757,32 @@ class Game {
         }).join('');
     }
 
-    // Share score to Farcaster
+    // Share score to Farcaster with contextual options
     async shareScore() {
         const achievement = leaderboard.getAchievementTier(this.score);
 
-        const text = `🦟 I scored ${this.score} points in Tap That Mosquito!\n\n` +
-            `${this.getAchievementIcon(achievement.tier)} ${achievement.name}\n` +
-            `🎯 Tapped: ${this.tappedCount} | ⚡ Best Combo: x${this.bestCombo || 1}\n\n` +
-            `Can you beat my score?`;
-
-        try {
-            await sdk.actions.composeCast({
-                text,
-                embeds: ['https://neon-shuttle.vercel.app'],
-            });
-        } catch (error) {
-            console.error('Share failed:', error);
-            // Fallback: copy to clipboard
-            try {
-                await navigator.clipboard.writeText(text + '\n\nhttps://neon-shuttle.vercel.app');
-                alert('Score copied to clipboard!');
-            } catch {
-                alert('Could not share. Try again in the Base app!');
-            }
+        // Check for pending contextual shares
+        if (this.pendingHighScoreShare) {
+            await shareManager.shareNewHighScore(this.pendingHighScoreShare);
+            this.pendingHighScoreShare = null;
+            return;
         }
+
+        if (this.pendingRankShare) {
+            await shareManager.shareLeaderboardRank(this.pendingRankShare);
+            this.pendingRankShare = null;
+            return;
+        }
+
+        // Default share (general score share)
+        const text = `I scored ${this.score} points in Tap That Mosquito!
+
+${achievement.name} Tier
+Tapped: ${this.tappedCount} | Best Combo: x${this.bestCombo || 1}
+
+Can you beat my score?`;
+
+        await shareManager.share(text);
     }
 
     // Toggle sound on/off
@@ -758,10 +821,22 @@ class Game {
             this.mintBtn.textContent = '✅ MINTED!';
 
             // Show success message
-            alert(`🎉 Success! You minted a "${tierInfo.name}" NFT!\n\nTransaction: ${result.hash.slice(0, 10)}...`);
+            alert(`Success! You minted a "${tierInfo.name}" NFT!\n\nTransaction: ${result.hash.slice(0, 10)}...`);
 
             // Disable button after successful mint
             this.mintBtn.disabled = true;
+
+            // Prompt to share achievement
+            setTimeout(() => {
+                if (confirm('Share your achievement on Farcaster?')) {
+                    const tierRarity = this.getTierRarity(tier);
+                    shareManager.shareAchievementMint({
+                        tierName: tierInfo.name,
+                        score: this.score,
+                        tierRarity
+                    });
+                }
+            }, 500);
 
         } catch (error) {
             console.error('Mint failed:', error);
@@ -850,6 +925,12 @@ class Game {
                 this.startVersusGame();
             }, 2000);
 
+            // Prompt to share challenge issued
+            const opponentName = this.formatAddress(opponentAddress);
+            if (confirm('Share this challenge on Farcaster to hype up the battle?')) {
+                shareManager.shareChallengeIssued({ opponentName });
+            }
+
         } catch (error) {
             console.error('Challenge creation failed:', error);
             alert('Failed to create challenge: ' + error.message);
@@ -922,6 +1003,14 @@ class Game {
             soundManager.playGameOver();
         }
 
+        // Update win tracking
+        if (this.isWinner) {
+            this.winStreak++;
+            this.totalWins++;
+        } else {
+            this.winStreak = 0;
+        }
+
         // Update versus result screen
         this.showVersusResult();
     }
@@ -988,11 +1077,39 @@ class Game {
 
             this.mintVictoryBtn.classList.remove('loading');
             this.mintVictoryBtn.classList.add('success');
-            this.mintVictoryBtn.textContent = '✅ MINTED!';
+            this.mintVictoryBtn.textContent = '\u2705 MINTED!';
             this.mintVictoryBtn.disabled = true;
 
-            const victoryInfo = getVictoryTitle(1); // Win streak = 1 for demo
-            alert(`🎉 Victory NFT Minted!\n\nTitle: ${victoryInfo.title}\nScore: ${this.score} vs ${this.opponentScore}\n\nYou defeated ${this.formatAddress(this.opponentAddress)}!`);
+            const victoryInfo = getVictoryTitle(this.winStreak);
+            alert(`Victory NFT Minted!\n\nTitle: ${victoryInfo.title}\nScore: ${this.score} vs ${this.opponentScore}\n\nYou defeated ${this.formatAddress(this.opponentAddress)}!`);
+
+            // Prompt to share victory
+            setTimeout(() => {
+                if (confirm('Share your victory on Farcaster?')) {
+                    const opponentName = this.username
+                        ? `@${this.formatAddress(this.opponentAddress)}`
+                        : this.formatAddress(this.opponentAddress);
+
+                    shareManager.shareVersusVictory({
+                        myScore: this.score,
+                        opponentScore: this.opponentScore,
+                        opponentName,
+                        winStreak: this.winStreak
+                    });
+                }
+
+                // Check for Champion NFT eligibility (5+ wins)
+                if (this.totalWins >= 5) {
+                    setTimeout(() => {
+                        if (confirm(`You've won ${this.totalWins} battles! You're eligible for a CHAMPION NFT. Want to claim and share?`)) {
+                            shareManager.shareChampionNFT({
+                                totalWins: this.totalWins,
+                                winStreak: this.winStreak
+                            });
+                        }
+                    }, 1000);
+                }
+            }, 500);
 
         } catch (error) {
             console.error('Victory NFT mint failed:', error);

@@ -11,6 +11,7 @@ import { TIER_INFO, Tier } from './contract.js';
 import { versusManager, getVictoryTitle } from './versusContract.js';
 import { shareManager } from './shareManager.js';
 import { referralManager } from './referralManager.js';
+import { sponsorManager } from './sponsorManager.js';
 
 class Game {
     constructor() {
@@ -385,6 +386,28 @@ class Game {
             this.showMultiplier();
             this.showBoostNotification('referral');
         }
+
+        // Check for sponsor perk (Silver+ = permanent boost!)
+        this.applySponsorPerk();
+    }
+
+    async applySponsorPerk() {
+        if (!this.walletAddress) return;
+
+        try {
+            const hasPerk = await sponsorManager.hasBoostPerk(this.walletAddress);
+            if (hasPerk) {
+                // Silver+ sponsors always get boosts
+                this.timeLeft += 10;                   // +10 seconds
+                this.comboMultiplier = Math.max(this.comboMultiplier, 2);
+                this.consecutiveTaps = Math.max(this.consecutiveTaps, 5);
+                this.timerEl.textContent = this.timeLeft;
+                this.showMultiplier();
+                this.showBoostNotification('sponsor');
+            }
+        } catch (error) {
+            console.log('Sponsor perk check failed:', error.message);
+        }
     }
 
     showBoostNotification(type = 'share') {
@@ -398,6 +421,15 @@ class Game {
                     <span>+10s</span>
                     <span>+50 pts</span>
                     <span>2x Start</span>
+                </div>
+            `;
+        } else if (type === 'sponsor') {
+            notification.innerHTML = `
+                <div class="boost-title">🏆 SPONSOR PERK!</div>
+                <div class="boost-items">
+                    <span>+10s</span>
+                    <span>2x Start</span>
+                    <span>Forever!</span>
                 </div>
             `;
         } else {

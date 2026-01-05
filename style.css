@@ -1494,3 +1494,13 @@ body {
 .boost-notification.referral .boost-title {
     color: white;
 }
+
+/* Sponsor Notification Style (Gold) */
+.boost-notification.sponsor {
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.95), rgba(218, 165, 32, 0.95));
+    box-shadow: 0 4px 20px rgba(255, 215, 0, 0.5);
+}
+
+.boost-notification.sponsor .boost-title {
+    color: #1a1a2e;
+}

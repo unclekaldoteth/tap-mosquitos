@@ -1,22 +1,22 @@
 {
     "accountAssociation": {
         "header": "eyJmaWQiOjQ1NjU4NSwidHlwZSI6ImN1c3RvZHkiLCJrZXkiOiIweDdGNzc4MzBkOTk1RTFiQmE3NkQwMmI0NUJjOGFDNzA1QzMyOTI3MjcifQ",
-        "payload": "eyJkb21haW4iOiJuZW9uLXNodXR0bGUudmVyY2VsLmFwcCJ9",
-        "signature": "lIDR5K7OOQ6v5QdYp8sk1+e1trkkGOLPwCYu/OZ6FthpsA4bYNZTtTXfU0F9m9OXyVMhA0Dv35kKzejgcwBEUhw="
+        "payload": "eyJkb21haW4iOiJ0YXAtbW9zcXVpdG8udmVyY2VsLmFwcCJ9",
+        "signature": "NEEDS_RE_SIGNING"
     },
     "miniapp": {
         "version": "1",
         "name": "Tap That Mosquito",
-        "homeUrl": "https://neon-shuttle.vercel.app",
-        "iconUrl": "https://neon-shuttle.vercel.app/icon.png",
-        "splashImageUrl": "https://neon-shuttle.vercel.app/splash.png",
+        "homeUrl": "https://tap-mosquito.vercel.app",
+        "iconUrl": "https://tap-mosquito.vercel.app/icon.png",
+        "splashImageUrl": "https://tap-mosquito.vercel.app/splash.png",
         "splashBackgroundColor": "#0a0a0f",
         "subtitle": "Tap fast, score high!",
         "description": "A fun pixel art mini game where you tap mosquitoes to score points. Race against the clock in 60-second rounds with combo multipliers!",
         "screenshotUrls": [
-            "https://neon-shuttle.vercel.app/screenshot1.png",
-            "https://neon-shuttle.vercel.app/screenshot2.png",
-            "https://neon-shuttle.vercel.app/screenshot3.png"
+            "https://tap-mosquito.vercel.app/screenshot1.png",
+            "https://tap-mosquito.vercel.app/screenshot2.png",
+            "https://tap-mosquito.vercel.app/screenshot3.png"
         ],
         "primaryCategory": "games",
         "tags": [
@@ -25,12 +25,12 @@
             "pixel-art",
             "casual"
         ],
-        "heroImageUrl": "https://neon-shuttle.vercel.app/og.png",
+        "heroImageUrl": "https://tap-mosquito.vercel.app/og.png",
         "tagline": "How many can you squash?",
         "ogTitle": "Tap That Mosquito!",
         "ogDescription": "A pixel art mosquito tapping game. Tap as many mosquitoes as you can in 60 seconds!",
-        "ogImageUrl": "https://neon-shuttle.vercel.app/og.png",
+        "ogImageUrl": "https://tap-mosquito.vercel.app/og.png",
         "noindex": false,
-        "webhookUrl": "https://neon-shuttle.vercel.app/api/webhook"
+        "webhookUrl": "https://tap-mosquito.vercel.app/api/webhook"
     }
 }

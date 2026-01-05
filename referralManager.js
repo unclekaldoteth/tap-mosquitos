@@ -3,7 +3,7 @@
    Handles referral codes, tracking, and rewards
    ============================================ */
 
-const APP_URL = 'https://neon-shuttle.vercel.app';
+const APP_URL = 'https://tap-mosquito.vercel.app';
 
 class ReferralManager {
     constructor() {

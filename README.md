@@ -105,7 +105,7 @@ tap-that-mosquito/
 
 ## Live Demo
 
-- https://neon-shuttle.vercel.app
+- https://tap-mosquito.vercel.app
 
 ---
 

@@ -7,7 +7,7 @@
 import { sdk } from '@farcaster/miniapp-sdk';
 import { referralManager } from './referralManager.js';
 
-const APP_URL = 'https://neon-shuttle.vercel.app';
+const APP_URL = 'https://tap-mosquito.vercel.app';
 
 // Get referral link (includes user's referral code if connected)
 function getShareLink() {

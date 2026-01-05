@@ -42,7 +42,12 @@ export const MOSQUITO_NFT_ABI = [
     },
     // Write functions
     {
-        inputs: [{ name: "tier", type: "uint8" }, { name: "score", type: "uint256" }],
+        inputs: [
+            { name: "tier", type: "uint8" },
+            { name: "score", type: "uint256" },
+            { name: "nonce", type: "uint256" },
+            { name: "signature", type: "bytes" }
+        ],
         name: "mintAchievement",
         outputs: [],
         stateMutability: "nonpayable",

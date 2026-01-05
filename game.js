@@ -128,6 +128,14 @@ class Game {
     }
 
     async init() {
+        // Signal to Base Mini App that the app is ready to display FIRST
+        try {
+            sdk.actions.ready();
+            console.log('SDK ready signal sent');
+        } catch (e) {
+            console.log('SDK ready failed:', e.message);
+        }
+
         this.startBtn.addEventListener('click', () => this.startGame());
         this.restartBtn.addEventListener('click', () => this.restartGame());
         this.walletBtn.addEventListener('click', () => this.handleWalletClick());
@@ -155,9 +163,6 @@ class Game {
 
         // Initialize NFT minter
         await nftMinter.init();
-
-        // Signal to Base Mini App that the app is ready to display
-        sdk.actions.ready();
 
         // Try to auto-connect wallet if in Mini App context
         await this.tryAutoConnect();

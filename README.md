@@ -258,6 +258,38 @@ npx hardhat run scripts/deploy.js --network baseSepolia
 - [x] Stackable boost rewards
 - [x] Referral link in all shares
 
+### Phase 7 - Prize Pool (Completed)
+- [x] PrizePool smart contract with USDC
+- [x] Sponsor tiers: Bronze $3, Silver $5, Gold $10, Diamond $20
+- [x] 90% weekly distribution, 10% reserve
+- [x] Signed distribution with trusted signer
+- [x] Sponsor NFT for Gold+ donors
+- [x] Permanent game boosts for Silver+ sponsors
+
+---
+
+## Prize Pool
+
+### How It Works
+Sponsors deposit USDC to fund weekly rewards for top players.
+
+| Tier | Deposit | Perks |
+|------|---------|-------|
+| 🥉 Bronze | $3 USDC | Name on Sponsor Wall |
+| 🥈 Silver | $5 USDC | + Permanent game boosts (+10s, 2x) |
+| 🥇 Gold | $10 USDC | + Exclusive Sponsor NFT |
+| 💎 Diamond | $20 USDC | + Featured in winner casts |
+
+### Weekly Distribution (90-10)
+| Rank | % of Pool |
+|------|-----------|
+| #1 | 30% |
+| #2 | 20% |
+| #3 | 12% |
+| #4 | 8% |
+| #5-10 | 20% (split) |
+| Reserve | 10% |
+
 ---
 
 ## Contributing

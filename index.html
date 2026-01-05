@@ -73,6 +73,56 @@
                     <button id="start-btn" class="pixel-btn">SOLO GAME</button>
                     <button id="versus-btn" class="pixel-btn versus-btn">⚔️ VERSUS</button>
                 </div>
+
+                <!-- Sponsor Wall -->
+                <div id="sponsor-wall" class="sponsor-wall">
+                    <div class="sponsor-header">
+                        <span class="sponsor-title">🏆 SPONSORS</span>
+                        <span id="pool-balance" class="pool-balance">$0 Pool</span>
+                    </div>
+                    <div id="sponsor-list" class="sponsor-list">
+                        <span class="no-sponsors">Be the first sponsor!</span>
+                    </div>
+                    <button id="become-sponsor-btn" class="sponsor-btn">💎 Become a Sponsor</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sponsor Modal -->
+        <div id="sponsor-modal" class="overlay hidden">
+            <div class="overlay-content sponsor-modal-content">
+                <h2 class="sponsor-modal-title">💎 BECOME A SPONSOR</h2>
+                <p class="sponsor-modal-subtitle">Fund the prize pool & get perks!</p>
+
+                <div class="sponsor-tiers">
+                    <button class="tier-btn bronze" data-amount="3">
+                        <span class="tier-icon">🥉</span>
+                        <span class="tier-name">Bronze</span>
+                        <span class="tier-price">$3</span>
+                        <span class="tier-perk">Name on Wall</span>
+                    </button>
+                    <button class="tier-btn silver" data-amount="5">
+                        <span class="tier-icon">🥈</span>
+                        <span class="tier-name">Silver</span>
+                        <span class="tier-price">$5</span>
+                        <span class="tier-perk">+ Game Boosts</span>
+                    </button>
+                    <button class="tier-btn gold" data-amount="10">
+                        <span class="tier-icon">🥇</span>
+                        <span class="tier-name">Gold</span>
+                        <span class="tier-price">$10</span>
+                        <span class="tier-perk">+ Sponsor NFT</span>
+                    </button>
+                    <button class="tier-btn diamond" data-amount="20">
+                        <span class="tier-icon">💎</span>
+                        <span class="tier-name">Diamond</span>
+                        <span class="tier-price">$20</span>
+                        <span class="tier-perk">+ Featured</span>
+                    </button>
+                </div>
+
+                <p id="sponsor-status" class="sponsor-status"></p>
+                <button id="close-sponsor-modal" class="pixel-btn small">← CLOSE</button>
             </div>
         </div>
 

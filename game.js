@@ -65,6 +65,16 @@ class Game {
         this.walletStatusIcon = document.getElementById('wallet-status-icon');
         this.walletStatusText = document.getElementById('wallet-status-text');
 
+        // Sponsor Wall elements
+        this.sponsorWall = document.getElementById('sponsor-wall');
+        this.poolBalance = document.getElementById('pool-balance');
+        this.sponsorList = document.getElementById('sponsor-list');
+        this.becomeSponsorBtn = document.getElementById('become-sponsor-btn');
+        this.sponsorModal = document.getElementById('sponsor-modal');
+        this.closeSponsorModal = document.getElementById('close-sponsor-modal');
+        this.sponsorStatus = document.getElementById('sponsor-status');
+        this.tierBtns = document.querySelectorAll('.tier-btn');
+
         this.achievementName = document.getElementById('achievement-name');
         this.rankDisplay = document.getElementById('rank-display');
         this.playerRank = document.getElementById('player-rank');
@@ -151,6 +161,74 @@ class Game {
 
         // Try to auto-connect wallet if in Mini App context
         await this.tryAutoConnect();
+
+        // Sponsor Wall event listeners
+        this.becomeSponsorBtn.addEventListener('click', () => this.showSponsorModal());
+        this.closeSponsorModal.addEventListener('click', () => this.hideSponsorModal());
+        this.tierBtns.forEach(btn => {
+            btn.addEventListener('click', () => this.handleTierClick(btn.dataset.amount));
+        });
+
+        // Load sponsors on init
+        this.loadSponsors();
+    }
+
+    showSponsorModal() {
+        if (!this.walletAddress) {
+            this.sponsorStatus.textContent = 'Please connect wallet first!';
+            this.sponsorStatus.style.color = '#ff6b6b';
+            return;
+        }
+        this.sponsorModal.classList.remove('hidden');
+        this.sponsorStatus.textContent = '';
+    }
+
+    hideSponsorModal() {
+        this.sponsorModal.classList.add('hidden');
+    }
+
+    async handleTierClick(amount) {
+        if (!this.walletAddress) {
+            this.sponsorStatus.textContent = 'Connect wallet first!';
+            return;
+        }
+
+        this.sponsorStatus.textContent = 'Processing...';
+        this.sponsorStatus.style.color = '#ffd700';
+
+        try {
+            await sponsorManager.deposit(parseInt(amount));
+            this.sponsorStatus.textContent = '✅ Thank you for sponsoring!';
+            this.sponsorStatus.style.color = 'var(--accent)';
+            await this.loadSponsors();
+            setTimeout(() => this.hideSponsorModal(), 2000);
+        } catch (error) {
+            this.sponsorStatus.textContent = error.message;
+            this.sponsorStatus.style.color = '#ff6b6b';
+        }
+    }
+
+    async loadSponsors() {
+        try {
+            const balance = await sponsorManager.getPoolBalance();
+            this.poolBalance.textContent = `$${balance} Pool`;
+
+            const sponsors = await sponsorManager.getAllSponsors();
+
+            if (sponsors.length === 0) {
+                this.sponsorList.innerHTML = '<span class="no-sponsors">Be the first sponsor!</span>';
+                return;
+            }
+
+            this.sponsorList.innerHTML = sponsors.slice(0, 10).map(s => {
+                const tierClass = s.tierName.toLowerCase();
+                const tierIcon = { bronze: '🥉', silver: '🥈', gold: '🥇', diamond: '💎' }[tierClass] || '';
+                const name = this.formatAddress(s.address);
+                return `<span class="sponsor-badge ${tierClass}">${tierIcon} ${name}</span>`;
+            }).join('');
+        } catch (error) {
+            console.log('Failed to load sponsors:', error.message);
+        }
     }
 
     async tryAutoConnect() {

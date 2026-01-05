@@ -10,6 +10,7 @@ import { nftMinter } from './nftMinter.js';
 import { TIER_INFO, Tier } from './contract.js';
 import { versusManager, getVictoryTitle } from './versusContract.js';
 import { shareManager } from './shareManager.js';
+import { referralManager } from './referralManager.js';
 
 class Game {
     constructor() {
@@ -259,6 +260,9 @@ class Game {
         this.username = username;
         this.walletBtn.classList.add('connected');
 
+        // Initialize referral system with wallet address
+        referralManager.init(address, null);
+
         // Display username if available, otherwise formatted address
         const displayName = username || this.formatAddress(address);
         this.walletText.textContent = displayName;
@@ -355,36 +359,59 @@ class Game {
     }
 
     applyShareBoosts() {
-        const boost = shareManager.consumeBoost();
-        if (!boost) return;
+        // Check for share boost first
+        const shareBoost = shareManager.consumeBoost();
+        if (shareBoost) {
+            this.timeLeft += shareBoost.bonusTime;
+            this.comboMultiplier = shareBoost.startMultiplier;
+            this.consecutiveTaps = 5;
+            this.hazardImmunity = shareBoost.hazardImmunity;
+            this.timerEl.textContent = this.timeLeft;
+            this.showMultiplier();
+            this.showBoostNotification('share');
+        }
 
-        // Apply boost bonuses
-        this.timeLeft += boost.bonusTime;          // +5 seconds
-        this.comboMultiplier = boost.startMultiplier; // Start with 2x
-        this.consecutiveTaps = 5;                    // Pre-fill taps for multiplier
-        this.hazardImmunity = boost.hazardImmunity;  // First hazard blocked
-
-        // Update displays
-        this.timerEl.textContent = this.timeLeft;
-        this.showMultiplier();
-
-        // Show boost notification
-        this.showBoostNotification();
+        // Check for referral boost (can stack!)
+        const refBoost = referralManager.consumeReferralBoost();
+        if (refBoost) {
+            this.timeLeft += refBoost.bonusTime;       // +10 seconds
+            this.score += refBoost.bonusPoints;         // +50 starting points
+            if (!shareBoost) {
+                this.comboMultiplier = refBoost.startMultiplier;
+                this.consecutiveTaps = 5;
+            }
+            this.timerEl.textContent = this.timeLeft;
+            this.scoreEl.textContent = this.score;
+            this.showMultiplier();
+            this.showBoostNotification('referral');
+        }
     }
 
-    showBoostNotification() {
+    showBoostNotification(type = 'share') {
         const notification = document.createElement('div');
-        notification.className = 'boost-notification';
-        notification.innerHTML = `
-            <div class="boost-title">🚀 SHARE BOOST!</div>
-            <div class="boost-items">
-                <span>+5s</span>
-                <span>2x Start</span>
-                <span>🛡️ Immunity</span>
-            </div>
-        `;
-        this.playArea.appendChild(notification);
+        notification.className = `boost-notification ${type}`;
 
+        if (type === 'referral') {
+            notification.innerHTML = `
+                <div class="boost-title">🔗 REFERRAL BONUS!</div>
+                <div class="boost-items">
+                    <span>+10s</span>
+                    <span>+50 pts</span>
+                    <span>2x Start</span>
+                </div>
+            `;
+        } else {
+            notification.innerHTML = `
+                <div class="boost-title">🚀 SHARE BOOST!</div>
+                <div class="boost-items">
+                    <span>+5s</span>
+                    <span>2x Start</span>
+                    <span>🛡️ Immunity</span>
+                </div>
+            `;
+        }
+
+        this.playArea.appendChild(notification);
         setTimeout(() => notification.remove(), 2500);
     }
 

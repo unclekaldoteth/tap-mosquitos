@@ -1,12 +1,18 @@
 /* ============================================
    SHARE MANAGER - Viral Content Sharing
    Handles all shareable content for Farcaster
-   Now with Share-to-Boost rewards!
+   Now with Share-to-Boost rewards and Referral Links!
    ============================================ */
 
 import { sdk } from '@farcaster/miniapp-sdk';
+import { referralManager } from './referralManager.js';
 
 const APP_URL = 'https://neon-shuttle.vercel.app';
+
+// Get referral link (includes user's referral code if connected)
+function getShareLink() {
+    return referralManager.getReferralLink() || APP_URL;
+}
 
 class ShareManager {
     constructor() {
@@ -50,9 +56,11 @@ class ShareManager {
     /**
      * Core share function using Farcaster SDK with fallbacks
      * Grants a boost for next game on successful share!
+     * Uses referral link for viral tracking
      */
     async share(text) {
-        const fullText = text + '\n\n' + APP_URL;
+        const shareLink = getShareLink();
+        const fullText = text + '\n\n' + shareLink;
         let shared = false;
 
         // Try Farcaster SDK first (only works in Mini App)
@@ -61,7 +69,7 @@ class ShareManager {
             if (isInMiniApp) {
                 await sdk.actions.composeCast({
                     text,
-                    embeds: [APP_URL],
+                    embeds: [shareLink],
                 });
                 shared = true;
             }
@@ -75,7 +83,7 @@ class ShareManager {
                 await navigator.share({
                     title: 'Tap That Mosquito',
                     text: text,
-                    url: APP_URL
+                    url: shareLink
                 });
                 shared = true;
             } catch (shareError) {

@@ -1484,3 +1484,13 @@ body {
         opacity: 0;
     }
 }
+
+/* Referral Notification Style */
+.boost-notification.referral {
+    background: linear-gradient(135deg, rgba(147, 51, 234, 0.95), rgba(109, 40, 217, 0.95));
+    box-shadow: 0 4px 20px rgba(147, 51, 234, 0.5);
+}
+
+.boost-notification.referral .boost-title {
+    color: white;
+}

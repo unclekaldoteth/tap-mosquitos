@@ -53,6 +53,25 @@ Tap That Mosquito is a fast-paced tapping game where players score points by eli
 
 ---
 
+## Viral Mechanics
+
+### Share-to-Boost
+Share your score → Get rewards in next game:
+- **+5 seconds** bonus time
+- **2x multiplier** from the start
+- **Hazard immunity** (first hazard blocked)
+
+### Referral System
+Invite friends via your unique link:
+- Referral code based on wallet address
+- Friend opens `?ref=CODE` link → Both get boosts:
+  - **+10 seconds** bonus time
+  - **+50 starting points**
+  - **2x multiplier** start
+- Boosts can stack!
+
+---
+
 ## Architecture Overview
 
 ### Smart Contracts (Solidity)
@@ -231,6 +250,13 @@ npx hardhat run scripts/deploy.js --network baseSepolia
 - [x] Hazard system (bees and skulls)
 - [x] Combo multiplier (2x/3x) system
 - [x] Avoidance rewards for strategic play
+
+### Phase 6 - Viral Mechanics (Completed)
+- [x] Share-to-Boost rewards system
+- [x] Referral code generation from wallet
+- [x] URL parameter tracking (?ref=CODE)
+- [x] Stackable boost rewards
+- [x] Referral link in all shares
 
 ---
 

@@ -4,6 +4,7 @@
         "payload": "eyJkb21haW4iOiJuZW9uLXNodXR0bGUudmVyY2VsLmFwcCJ9",
         "signature": "lIDR5K7OOQ6v5QdYp8sk1+e1trkkGOLPwCYu/OZ6FthpsA4bYNZTtTXfU0F9m9OXyVMhA0Dv35kKzejgcwBEUhw="
     },
+    "webhookUrl": "https://neon-shuttle.vercel.app/api/webhook",
     "miniapp": {
         "version": "1",
         "name": "Tap That Mosquito",

@@ -1,6 +1,7 @@
 /* ============================================
    SHARE MANAGER - Viral Content Sharing
    Handles all shareable content for Farcaster
+   Now with Share-to-Boost rewards!
    ============================================ */
 
 import { sdk } from '@farcaster/miniapp-sdk';
@@ -10,13 +11,49 @@ const APP_URL = 'https://neon-shuttle.vercel.app';
 class ShareManager {
     constructor() {
         this.hasSharedFirstGame = localStorage.getItem('mosquito-first-game-shared') === 'true';
+        this.pendingBoost = localStorage.getItem('mosquito-pending-boost') === 'true';
+    }
+
+    /**
+     * Grant boost for next game after successful share
+     */
+    grantShareBoost() {
+        this.pendingBoost = true;
+        localStorage.setItem('mosquito-pending-boost', 'true');
+        console.log('🚀 Share boost granted for next game!');
+    }
+
+    /**
+     * Check if player has a pending boost
+     */
+    hasBoost() {
+        return this.pendingBoost;
+    }
+
+    /**
+     * Consume the boost (called when game starts)
+     * Returns boost details or null
+     */
+    consumeBoost() {
+        if (!this.pendingBoost) return null;
+
+        this.pendingBoost = false;
+        localStorage.removeItem('mosquito-pending-boost');
+
+        return {
+            bonusTime: 5,           // +5 seconds
+            startMultiplier: 2,     // Start with 2x
+            hazardImmunity: 1       // First hazard immunity
+        };
     }
 
     /**
      * Core share function using Farcaster SDK with fallbacks
+     * Grants a boost for next game on successful share!
      */
     async share(text) {
         const fullText = text + '\n\n' + APP_URL;
+        let shared = false;
 
         // Try Farcaster SDK first (only works in Mini App)
         try {
@@ -26,21 +63,21 @@ class ShareManager {
                     text,
                     embeds: [APP_URL],
                 });
-                return true;
+                shared = true;
             }
         } catch (sdkError) {
             console.log('SDK composeCast not available:', sdkError.message);
         }
 
         // Fallback 1: Web Share API (mobile browsers)
-        if (navigator.share) {
+        if (!shared && navigator.share) {
             try {
                 await navigator.share({
                     title: 'Tap That Mosquito',
                     text: text,
                     url: APP_URL
                 });
-                return true;
+                shared = true;
             } catch (shareError) {
                 // User cancelled or share failed
                 if (shareError.name !== 'AbortError') {
@@ -50,24 +87,34 @@ class ShareManager {
         }
 
         // Fallback 2: Open Warpcast compose URL
-        try {
-            const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(fullText)}`;
-            window.open(warpcastUrl, '_blank');
-            return true;
-        } catch (warpcastError) {
-            console.log('Warpcast redirect failed:', warpcastError.message);
+        if (!shared) {
+            try {
+                const warpcastUrl = `https://warpcast.com/~/compose?text=${encodeURIComponent(fullText)}`;
+                window.open(warpcastUrl, '_blank');
+                shared = true;
+            } catch (warpcastError) {
+                console.log('Warpcast redirect failed:', warpcastError.message);
+            }
         }
 
         // Fallback 3: Copy to clipboard
-        try {
-            await navigator.clipboard.writeText(fullText);
-            alert('Copied to clipboard! Paste it in your Farcaster client.');
-            return true;
-        } catch (clipboardError) {
-            console.error('Clipboard copy failed:', clipboardError);
-            alert('Could not share. Please copy this text manually:\n\n' + fullText);
-            return false;
+        if (!shared) {
+            try {
+                await navigator.clipboard.writeText(fullText);
+                alert('Copied to clipboard! Paste it in your Farcaster client.');
+                shared = true;
+            } catch (clipboardError) {
+                console.error('Clipboard copy failed:', clipboardError);
+                alert('Could not share. Please copy this text manually:\n\n' + fullText);
+            }
         }
+
+        // Grant boost for next game if share was successful!
+        if (shared) {
+            this.grantShareBoost();
+        }
+
+        return shared;
     }
 
     /**

@@ -337,6 +337,7 @@ class Game {
     startGame() {
         this.startScreen.classList.add('hidden');
         this.resetGame();
+        this.applyShareBoosts();
         this.isRunning = true;
         this.startTimers();
         this.spawnMosquito();
@@ -346,10 +347,45 @@ class Game {
     restartGame() {
         this.gameOverScreen.classList.add('hidden');
         this.resetGame();
+        this.applyShareBoosts();
         this.isRunning = true;
         this.startTimers();
         this.spawnMosquito();
         soundManager.playStart();
+    }
+
+    applyShareBoosts() {
+        const boost = shareManager.consumeBoost();
+        if (!boost) return;
+
+        // Apply boost bonuses
+        this.timeLeft += boost.bonusTime;          // +5 seconds
+        this.comboMultiplier = boost.startMultiplier; // Start with 2x
+        this.consecutiveTaps = 5;                    // Pre-fill taps for multiplier
+        this.hazardImmunity = boost.hazardImmunity;  // First hazard blocked
+
+        // Update displays
+        this.timerEl.textContent = this.timeLeft;
+        this.showMultiplier();
+
+        // Show boost notification
+        this.showBoostNotification();
+    }
+
+    showBoostNotification() {
+        const notification = document.createElement('div');
+        notification.className = 'boost-notification';
+        notification.innerHTML = `
+            <div class="boost-title">🚀 SHARE BOOST!</div>
+            <div class="boost-items">
+                <span>+5s</span>
+                <span>2x Start</span>
+                <span>🛡️ Immunity</span>
+            </div>
+        `;
+        this.playArea.appendChild(notification);
+
+        setTimeout(() => notification.remove(), 2500);
     }
 
     resetGame() {
@@ -366,6 +402,7 @@ class Game {
         this.comboMultiplier = 1;
         this.consecutiveTaps = 0;
         this.isSwarmActive = false;
+        this.hazardImmunity = 0;
         this.swarmTimeouts.forEach(t => clearTimeout(t));
         this.swarmTimeouts = [];
 
@@ -685,7 +722,23 @@ class Game {
     }
 
     handleHazardTap(data, penalty) {
-        // Apply penalty
+        // Check for hazard immunity from share boost
+        if (this.hazardImmunity && this.hazardImmunity > 0) {
+            this.hazardImmunity--;
+            this.showImmunityBlock(data.element);
+
+            // Remove hazard without penalty
+            data.element.classList.add('blocked');
+            setTimeout(() => {
+                if (data.element.parentNode) {
+                    data.element.remove();
+                }
+                this.removeMosquitoData(data);
+            }, 300);
+            return;
+        }
+
+        // Apply penalty (no immunity)
         this.score = Math.max(0, this.score + penalty);
         this.scoreEl.textContent = this.score;
 
@@ -710,6 +763,21 @@ class Game {
             }
             this.removeMosquitoData(data);
         }, 300);
+    }
+
+    showImmunityBlock(element) {
+        const popup = document.createElement('div');
+        popup.className = 'score-popup immunity';
+        popup.textContent = '🛡️ BLOCKED!';
+
+        const rect = element.getBoundingClientRect();
+        const areaRect = this.playArea.getBoundingClientRect();
+
+        popup.style.left = `${rect.left - areaRect.left + rect.width / 2}px`;
+        popup.style.top = `${rect.top - areaRect.top}px`;
+
+        this.playArea.appendChild(popup);
+        setTimeout(() => popup.remove(), 800);
     }
 
     updateComboMultiplier() {

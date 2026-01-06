@@ -211,7 +211,7 @@ class Game {
     }
 
     nextOnboardingSlide() {
-        if (this.currentSlide < 2) {
+        if (this.currentSlide < 3) {
             this.goToOnboardingSlide(this.currentSlide + 1);
         } else {
             // Last slide - complete onboarding
@@ -233,7 +233,7 @@ class Game {
         this.currentSlide = index;
 
         // Update button text on last slide
-        this.onboardingNextBtn.textContent = index === 2 ? 'START' : 'NEXT';
+        this.onboardingNextBtn.textContent = index === 3 ? 'START' : 'NEXT';
     }
 
     completeOnboarding() {

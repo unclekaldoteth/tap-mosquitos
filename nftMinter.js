@@ -129,6 +129,7 @@ class NFTMinter {
 
     /**
      * Mint achievement NFT (requires backend signature)
+     * Uses sponsored transactions via paymaster if available
      * @param {number} tier - Tier enum value (0-4)
      * @param {number} score - Score achieved
      */
@@ -153,7 +154,24 @@ class NFTMinter {
         const nonce = Date.now();
         const signature = await this.fetchSignature(account, tier, score, nonce);
 
-        // Call contract using ethers.js
+        // Try sponsored transaction first (gas-free for user)
+        const paymasterUrl = import.meta.env.VITE_PAYMASTER_URL;
+
+        if (paymasterUrl) {
+            try {
+                const receipt = await this.sendSponsoredTransaction(tier, score, nonce, signature);
+                return {
+                    hash: receipt.transactionHash || receipt.hash,
+                    tier: tier,
+                    tierInfo: TIER_INFO[tier],
+                    sponsored: true
+                };
+            } catch (sponsoredError) {
+                console.log('Sponsored transaction failed, falling back to regular:', sponsoredError.message);
+            }
+        }
+
+        // Fallback: Regular transaction (user pays gas)
         const tx = await this.contract.mintAchievement(tier, score, nonce, signature);
         const receipt = await tx.wait();
 
@@ -161,7 +179,79 @@ class NFTMinter {
             hash: receipt.hash,
             tier: tier,
             tierInfo: TIER_INFO[tier],
+            sponsored: false
         };
+    }
+
+    /**
+     * Send sponsored transaction using wallet_sendCalls with paymaster
+     * @param {number} tier - Tier enum value
+     * @param {number} score - Score achieved
+     * @param {number} nonce - Unique nonce
+     * @param {string} signature - Backend signature
+     */
+    async sendSponsoredTransaction(tier, score, nonce, signature) {
+        const paymasterUrl = import.meta.env.VITE_PAYMASTER_URL;
+        if (!paymasterUrl) {
+            throw new Error('Paymaster URL not configured');
+        }
+
+        // Encode the function call
+        const iface = new ethers.Interface(MOSQUITO_NFT_ABI);
+        const calldata = iface.encodeFunctionData('mintAchievement', [tier, score, nonce, signature]);
+
+        // Get the raw provider for wallet_sendCalls
+        let rawProvider = null;
+        try {
+            rawProvider = await sdk.wallet.getEthereumProvider();
+        } catch {
+            if (typeof window !== 'undefined' && window.ethereum) {
+                rawProvider = window.ethereum;
+            }
+        }
+
+        if (!rawProvider) {
+            throw new Error('No Ethereum provider available');
+        }
+
+        // Check if wallet supports EIP-5792 (wallet_sendCalls)
+        try {
+            const capabilities = await rawProvider.request({
+                method: 'wallet_getCapabilities',
+                params: []
+            });
+            console.log('Wallet capabilities:', capabilities);
+        } catch (e) {
+            console.log('wallet_getCapabilities not supported, trying sendCalls anyway');
+        }
+
+        // Send sponsored transaction
+        const result = await rawProvider.request({
+            method: 'wallet_sendCalls',
+            params: [{
+                version: '1.0',
+                from: await this.signer.getAddress(),
+                calls: [{
+                    to: this.contractAddress,
+                    data: calldata,
+                    value: '0x0'
+                }],
+                capabilities: {
+                    paymasterService: {
+                        url: paymasterUrl
+                    }
+                }
+            }]
+        });
+
+        // Wait for transaction confirmation
+        // result may be a transaction hash or a call ID depending on wallet
+        if (typeof result === 'string' && result.startsWith('0x')) {
+            const receipt = await this.provider.waitForTransaction(result);
+            return receipt;
+        }
+
+        return { hash: result, transactionHash: result };
     }
 
     /**

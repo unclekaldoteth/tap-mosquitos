@@ -41,6 +41,7 @@ class Game {
         this.leaderboardList = document.getElementById('leaderboard-list');
         this.achievementBadge = document.getElementById('achievement-badge');
         this.achievementIcon = document.getElementById('achievement-icon');
+        this.menuBtn = document.getElementById('menu-btn');
 
         // Versus mode elements
         this.versusBtn = document.getElementById('versus-btn');
@@ -142,6 +143,7 @@ class Game {
         this.shareBtn.addEventListener('click', () => this.shareScore());
         this.mintBtn.addEventListener('click', () => this.mintNFT());
         this.soundToggle.addEventListener('click', () => this.toggleSound());
+        this.menuBtn.addEventListener('click', () => this.goToMainMenu());
 
         // Versus mode event listeners
         this.versusBtn.addEventListener('click', () => this.showVersusScreen());
@@ -1222,10 +1224,19 @@ class Game {
             else if (index === 1) rankClass = 'silver';
             else if (index === 2) rankClass = 'bronze';
 
+            // Use username if available, otherwise format address
+            // Fix for old entries that might have "Connected" stored
+            let displayName = entry.username;
+            if (!displayName || displayName === 'Connected') {
+                displayName = entry.address && entry.address !== 'Anonymous'
+                    ? this.formatAddress(entry.address)
+                    : '???';
+            }
+
             return `
                 <div class="leaderboard-entry ${isCurrentPlayer ? 'current-player' : ''}">
                     <span class="leaderboard-rank ${rankClass}">#${index + 1}</span>
-                    <span class="leaderboard-name">${entry.displayAddress}</span>
+                    <span class="leaderboard-name">${displayName}</span>
                     <span class="leaderboard-score">${entry.score}</span>
                 </div>
             `;
@@ -1435,6 +1446,13 @@ Can you beat my score?`;
     startVersusRematch() {
         this.versusResultScreen.classList.add('hidden');
         this.startVersusGame();
+    }
+
+    // Go to main menu from game over screen
+    goToMainMenu() {
+        this.gameOverScreen.classList.add('hidden');
+        this.startScreen.classList.remove('hidden');
+        this.loadSponsors(); // Refresh sponsors
     }
 
     backToMainMenu() {

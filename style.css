@@ -293,6 +293,7 @@ body {
     font-family: 'Press Start 2P', cursive;
     font-size: 12px;
     padding: 16px 32px;
+    min-height: 44px;
     background: var(--primary);
     color: var(--bg-dark);
     border: none;
@@ -506,6 +507,7 @@ body {
     font-family: 'Press Start 2P', cursive;
     font-size: 10px;
     padding: 12px 20px;
+    min-height: 44px;
     border: none;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -1702,4 +1704,153 @@ body {
     color: var(--accent);
     min-height: 20px;
     margin-bottom: 10px;
+}
+
+/* ============================================
+   ONBOARDING MODAL STYLES
+   ============================================ */
+
+.onboarding-content {
+    max-width: 320px;
+}
+
+.onboarding-slides {
+    position: relative;
+    min-height: 200px;
+}
+
+.onboarding-slide {
+    display: none;
+    text-align: center;
+    animation: fadeIn 0.3s ease;
+}
+
+.onboarding-slide.active {
+    display: block;
+}
+
+.onboarding-icon {
+    font-size: 64px;
+    margin-bottom: 16px;
+    animation: fly 0.5s ease-in-out infinite alternate;
+}
+
+.onboarding-title {
+    font-size: 16px;
+    color: var(--primary);
+    margin-bottom: 12px;
+    text-shadow: 0 0 10px var(--shadow-glow);
+}
+
+.onboarding-text {
+    font-size: 10px;
+    color: var(--text);
+    line-height: 1.6;
+    margin-bottom: 24px;
+}
+
+.onboarding-dots {
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.onboarding-dots .dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--border);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.onboarding-dots .dot.active {
+    background: var(--primary);
+    box-shadow: 0 0 10px var(--shadow-glow);
+}
+
+.onboarding-dots .dot:hover {
+    transform: scale(1.2);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ============================================
+   LIGHT MODE SUPPORT
+   ============================================ */
+
+@media (prefers-color-scheme: light) {
+    :root {
+        --bg-dark: #f5f5f7;
+        --bg-card: #ffffff;
+        --bg-play: #f0f0f5;
+        --primary: #00aa60;
+        --primary-dim: #008850;
+        --accent: #e05585;
+        --accent-bright: #ff7090;
+        --warning: #cc9900;
+        --text: #1a1a1a;
+        --text-dim: #666680;
+        --border: #d0d0e0;
+        --shadow-glow: rgba(0, 170, 96, 0.2);
+    }
+
+    body {
+        background-image:
+            radial-gradient(ellipse at top, #e8e8f0 0%, transparent 50%),
+            radial-gradient(ellipse at bottom, #f0f5ff 0%, transparent 50%);
+    }
+
+    .game-container {
+        box-shadow:
+            0 0 0 var(--pixel-size) var(--bg-dark),
+            0 4px 20px rgba(0, 0, 0, 0.1);
+    }
+
+    .overlay {
+        background: rgba(245, 245, 247, 0.95);
+    }
+
+    .mosquito {
+        filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+    }
+
+    .score-popup {
+        text-shadow:
+            2px 2px 0 var(--bg-card),
+            0 0 10px var(--shadow-glow);
+    }
+
+    .leaderboard-entry {
+        background: rgba(0, 0, 0, 0.03);
+    }
+
+    .leaderboard-entry.current-player {
+        background: rgba(0, 170, 96, 0.1);
+    }
+
+    /* Ensure buttons have good contrast in light mode */
+    .pixel-btn {
+        color: #ffffff;
+    }
+
+    .wallet-btn {
+        background: var(--bg-card);
+        color: var(--text);
+    }
+
+    .action-btn.share-btn {
+        color: #ffffff;
+    }
 }

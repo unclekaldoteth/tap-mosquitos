@@ -1,6 +1,6 @@
 /* ============================================
    SHARE MANAGER - Viral Content Sharing
-   Handles all shareable content for Farcaster
+   Handles all shareable content for social feeds
    Now with Share-to-Boost rewards and Referral Links!
    ============================================ */
 
@@ -63,7 +63,7 @@ class ShareManager {
         const fullText = text + '\n\n' + shareLink;
         let shared = false;
 
-        // Try Farcaster SDK first (only works in Mini App)
+        // Try SDK composeCast first (only works in Mini App)
         try {
             const isInMiniApp = await sdk.isInMiniApp();
             if (isInMiniApp) {
@@ -109,7 +109,7 @@ class ShareManager {
         if (!shared) {
             try {
                 await navigator.clipboard.writeText(fullText);
-                alert('Copied to clipboard! Paste it in your Farcaster client.');
+                alert('Copied to clipboard! Paste it to share.');
                 shared = true;
             } catch (clipboardError) {
                 console.error('Clipboard copy failed:', clipboardError);

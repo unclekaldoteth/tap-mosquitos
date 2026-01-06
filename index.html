@@ -55,6 +55,40 @@
             <!-- Mosquitoes spawn here -->
         </main>
 
+        <!-- Onboarding Modal (first-time users) -->
+        <div id="onboarding-modal" class="overlay hidden">
+            <div class="overlay-content onboarding-content">
+                <div id="onboarding-slides" class="onboarding-slides">
+                    <!-- Slide 1 -->
+                    <div class="onboarding-slide active" data-slide="0">
+                        <div class="onboarding-icon">🦟</div>
+                        <h2 class="onboarding-title">Welcome!</h2>
+                        <p class="onboarding-text">Tap mosquitoes before they fly away. You have 60 seconds!</p>
+                    </div>
+                    <!-- Slide 2 -->
+                    <div class="onboarding-slide" data-slide="1">
+                        <div class="onboarding-icon">⚡</div>
+                        <h2 class="onboarding-title">Build Combos</h2>
+                        <p class="onboarding-text">Tap quickly to build combos and earn bonus points. Watch out for
+                            hazards!</p>
+                    </div>
+                    <!-- Slide 3 -->
+                    <div class="onboarding-slide" data-slide="2">
+                        <div class="onboarding-icon">🏆</div>
+                        <h2 class="onboarding-title">Compete & Earn</h2>
+                        <p class="onboarding-text">Climb the leaderboard and mint achievement NFTs for your high scores!
+                        </p>
+                    </div>
+                </div>
+                <div class="onboarding-dots">
+                    <span class="dot active" data-slide="0"></span>
+                    <span class="dot" data-slide="1"></span>
+                    <span class="dot" data-slide="2"></span>
+                </div>
+                <button id="onboarding-next-btn" class="pixel-btn">NEXT</button>
+            </div>
+        </div>
+
         <!-- Start Screen -->
         <div id="start-screen" class="overlay">
             <div class="overlay-content">

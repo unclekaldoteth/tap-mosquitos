@@ -179,6 +179,67 @@ class Game {
 
         // Load sponsors on init
         this.loadSponsors();
+
+        // Show onboarding for first-time users
+        this.initOnboarding();
+    }
+
+    initOnboarding() {
+        const hasSeenOnboarding = localStorage.getItem('mosquito-onboarding-seen');
+
+        if (!hasSeenOnboarding) {
+            this.onboardingModal = document.getElementById('onboarding-modal');
+            this.onboardingNextBtn = document.getElementById('onboarding-next-btn');
+            this.onboardingSlides = document.querySelectorAll('.onboarding-slide');
+            this.onboardingDots = document.querySelectorAll('.onboarding-dots .dot');
+            this.currentSlide = 0;
+
+            // Show onboarding modal
+            this.onboardingModal.classList.remove('hidden');
+            this.startScreen.classList.add('hidden');
+
+            // Handle next button
+            this.onboardingNextBtn.addEventListener('click', () => this.nextOnboardingSlide());
+
+            // Handle dot clicks
+            this.onboardingDots.forEach(dot => {
+                dot.addEventListener('click', () => {
+                    this.goToOnboardingSlide(parseInt(dot.dataset.slide));
+                });
+            });
+        }
+    }
+
+    nextOnboardingSlide() {
+        if (this.currentSlide < 2) {
+            this.goToOnboardingSlide(this.currentSlide + 1);
+        } else {
+            // Last slide - complete onboarding
+            this.completeOnboarding();
+        }
+    }
+
+    goToOnboardingSlide(index) {
+        // Update slides
+        this.onboardingSlides.forEach((slide, i) => {
+            slide.classList.toggle('active', i === index);
+        });
+
+        // Update dots
+        this.onboardingDots.forEach((dot, i) => {
+            dot.classList.toggle('active', i === index);
+        });
+
+        this.currentSlide = index;
+
+        // Update button text on last slide
+        this.onboardingNextBtn.textContent = index === 2 ? 'START' : 'NEXT';
+    }
+
+    completeOnboarding() {
+        localStorage.setItem('mosquito-onboarding-seen', 'true');
+        this.onboardingModal.classList.add('hidden');
+        this.startScreen.classList.remove('hidden');
     }
 
     showSponsorModal() {
@@ -270,29 +331,30 @@ class Game {
             this.walletText.textContent = '...';
             this.walletStatusText.textContent = 'Connecting...';
 
-            // Try SDK signIn first (works in Mini App)
+            // Try Quick Auth first (preferred for Base app)
             let connected = false;
 
             try {
                 const isInMiniApp = await sdk.isInMiniApp();
                 if (isInMiniApp) {
-                    const result = await sdk.actions.signIn({
-                        nonce: this.generateNonce(),
-                        acceptAuthAddress: true,
-                    });
+                    // Use Quick Auth for seamless in-app authentication
+                    const { token } = await sdk.quickAuth.getToken();
 
-                    if (result?.signature) {
-                        const address = result.custody || result.fid?.toString() || 'Connected';
-                        let username = result.username || null;
-                        if (!username && address.startsWith('0x')) {
-                            username = await this.fetchFarcasterUsername(address);
-                        }
+                    if (token) {
+                        // Get user context for address and username
+                        const context = await sdk.context;
+                        const address = context?.user?.connectedAddress || 'Connected';
+                        const username = context?.user?.username || context?.user?.displayName || null;
+
+                        // Store the auth token for future authenticated requests
+                        this.authToken = token;
+
                         this.setWalletConnected(address, username);
                         connected = true;
                     }
                 }
             } catch (sdkError) {
-                console.log('SDK signIn not available, trying MetaMask...', sdkError.message);
+                console.log('Quick Auth not available, trying MetaMask...', sdkError.message);
             }
 
             // Fallback to MetaMask/window.ethereum

@@ -363,6 +363,12 @@ class Game {
 
         // Show game content (buttons, sponsor wall) after wallet connected
         this.gameContent.classList.remove('hidden');
+
+        // Retroactively update usernames in leaderboard for this user
+        if (username) {
+            leaderboard.updateUsername(address, username);
+            this.renderLeaderboard(); // Re-render if looking at it
+        }
     }
 
     // Get display name (username or formatted address)
@@ -1230,17 +1236,27 @@ class Game {
 
             // Use username if available, otherwise format address
             // Fix for old entries that might have "Connected" stored
-            let displayName = entry.username;
-            if (!displayName || displayName === 'Connected') {
-                displayName = entry.address && entry.address !== 'Anonymous'
+            let nameDisplay = entry.username;
+
+            // Fallback: If this is the current user and we know their username, use it!
+            if ((!nameDisplay || nameDisplay === 'Connected') &&
+                this.walletAddress &&
+                entry.address === this.walletAddress &&
+                this.username) {
+                nameDisplay = this.username;
+            }
+
+            if (!nameDisplay || nameDisplay === 'Connected') {
+                nameDisplay = entry.address && entry.address !== 'Anonymous'
                     ? this.formatAddress(entry.address)
                     : '???';
             }
 
+
             return `
                 <div class="leaderboard-entry ${isCurrentPlayer ? 'current-player' : ''}">
                     <span class="leaderboard-rank ${rankClass}">#${index + 1}</span>
-                    <span class="leaderboard-name">${displayName}</span>
+                    <span class="leaderboard-name">${nameDisplay}</span>
                     <span class="leaderboard-score">${entry.score}</span>
                 </div>
             `;

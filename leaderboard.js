@@ -83,6 +83,26 @@ class LeaderboardManager {
         return `${address.slice(0, 4)}..${address.slice(-4)}`;
     }
 
+    // Update username for existing entries with this address
+    updateUsername(address, username) {
+        if (!address || !username) return;
+
+        let updated = false;
+        this.entries.forEach(entry => {
+            if (entry.address && entry.address.toLowerCase() === address.toLowerCase()) {
+                if (entry.username !== username) {
+                    entry.username = username;
+                    entry.displayAddress = username; // Ensure display address is also updated
+                    updated = true;
+                }
+            }
+        });
+
+        if (updated) {
+            this.save();
+        }
+    }
+
     // Get achievement tier based on score
     getAchievementTier(score) {
         if (score >= 2000) return { tier: 'legendary', name: 'Mosquito Slayer', color: '#ff6b9d' };
@@ -91,6 +111,7 @@ class LeaderboardManager {
         if (score >= 200) return { tier: 'uncommon', name: 'Pest Control', color: '#22c55e' };
         return { tier: 'common', name: 'Beginner', color: '#6b7280' };
     }
+
 }
 
 export const leaderboard = new LeaderboardManager();

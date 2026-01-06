@@ -65,6 +65,7 @@ class Game {
         this.walletStatus = document.getElementById('wallet-status');
         this.walletStatusIcon = document.getElementById('wallet-status-icon');
         this.walletStatusText = document.getElementById('wallet-status-text');
+        this.gameContent = document.getElementById('game-content');
 
         // Sponsor Wall elements
         this.sponsorWall = document.getElementById('sponsor-wall');
@@ -359,6 +360,9 @@ class Game {
         this.walletStatus.classList.add('connected');
         this.walletStatusIcon.textContent = '✅';
         this.walletStatusText.textContent = displayName;
+
+        // Show game content (buttons, sponsor wall) after wallet connected
+        this.gameContent.classList.remove('hidden');
     }
 
     // Get display name (username or formatted address)

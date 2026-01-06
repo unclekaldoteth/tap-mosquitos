@@ -69,21 +69,24 @@
                     <span id="wallet-status-text">Connect Wallet</span>
                 </div>
 
-                <div class="start-buttons">
-                    <button id="start-btn" class="pixel-btn">SOLO GAME</button>
-                    <button id="versus-btn" class="pixel-btn versus-btn">⚔️ VERSUS</button>
-                </div>
+                <!-- Game Content - Hidden until wallet connected -->
+                <div id="game-content" class="game-content hidden">
+                    <div class="start-buttons">
+                        <button id="start-btn" class="pixel-btn">SOLO GAME</button>
+                        <button id="versus-btn" class="pixel-btn versus-btn">⚔️ VERSUS</button>
+                    </div>
 
-                <!-- Sponsor Wall -->
-                <div id="sponsor-wall" class="sponsor-wall">
-                    <div class="sponsor-header">
-                        <span class="sponsor-title">🏆 SPONSORS</span>
-                        <span id="pool-balance" class="pool-balance">$0 Pool</span>
+                    <!-- Sponsor Wall -->
+                    <div id="sponsor-wall" class="sponsor-wall">
+                        <div class="sponsor-header">
+                            <span class="sponsor-title">🏆 SPONSORS</span>
+                            <span id="pool-balance" class="pool-balance">$0 Pool</span>
+                        </div>
+                        <div id="sponsor-list" class="sponsor-list">
+                            <span class="no-sponsors">Be the first sponsor!</span>
+                        </div>
+                        <button id="become-sponsor-btn" class="sponsor-btn">💎 Become a Sponsor</button>
                     </div>
-                    <div id="sponsor-list" class="sponsor-list">
-                        <span class="no-sponsors">Be the first sponsor!</span>
-                    </div>
-                    <button id="become-sponsor-btn" class="sponsor-btn">💎 Become a Sponsor</button>
                 </div>
             </div>
         </div>

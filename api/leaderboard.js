@@ -32,7 +32,7 @@ export default async function handler(req, res) {
                 .from('leaderboard')
                 .select('*')
                 .order('score', { ascending: false })
-                .limit(10);
+                .limit(50);
 
             if (error) throw error;
 

@@ -55,6 +55,21 @@
             <!-- Mosquitoes spawn here -->
         </main>
 
+        <!-- Challenge Received Modal -->
+        <div id="challenge-received-modal" class="overlay hidden">
+            <div class="overlay-content challenge-received-content">
+                <div class="challenge-icon">⚔️</div>
+                <h2 class="challenge-title">CHALLENGE RECEIVED!</h2>
+                <p class="challenge-from">@<span id="challenger-name">challenger</span> challenges you!</p>
+                <p class="challenge-desc">Beat their score to earn a Victory NFT!</p>
+                <div class="challenge-buttons">
+                    <button id="accept-challenge-btn" class="pixel-btn accept">ACCEPT</button>
+                    <button id="decline-challenge-btn" class="pixel-btn decline">DECLINE</button>
+                </div>
+            </div>
+        </div>
+
+
         <!-- Onboarding Modal (first-time users) -->
         <div id="onboarding-modal" class="overlay hidden">
             <div class="overlay-content onboarding-content">
@@ -180,9 +195,10 @@
                 <div class="challenge-options">
                     <div class="challenge-option">
                         <h3>📤 Create Challenge</h3>
-                        <input type="text" id="opponent-address" class="address-input"
-                            placeholder="Enter opponent's address (0x...)" />
+                        <input type="text" id="opponent-username" class="username-input"
+                            placeholder="Enter username (e.g. @vitalik)" />
                         <button id="create-challenge-btn" class="action-btn">SEND CHALLENGE</button>
+                        <p id="challenge-status" class="challenge-status"></p>
                     </div>
 
                     <div class="divider">OR</div>
@@ -236,8 +252,9 @@
                 </div>
 
                 <div class="versus-result-buttons">
-                    <button id="rematch-btn" class="pixel-btn">REMATCH</button>
-                    <button id="versus-menu-btn" class="pixel-btn small">MENU</button>
+                    <button id="rematch-btn" class="pixel-btn">🔄 REMATCH</button>
+                    <button id="challenge-another-btn" class="pixel-btn">⚔️ CHALLENGE ANOTHER</button>
+                    <button id="versus-menu-btn" class="pixel-btn small">← MENU</button>
                 </div>
             </div>
         </div>

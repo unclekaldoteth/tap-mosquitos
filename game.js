@@ -180,6 +180,9 @@ class Game {
         // Load sponsors on init
         this.loadSponsors();
 
+        // Fetch global leaderboard
+        await leaderboard.fetchGlobal();
+
         // Show onboarding for first-time users
         this.initOnboarding();
     }

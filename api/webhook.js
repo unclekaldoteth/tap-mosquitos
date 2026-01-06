@@ -1,8 +1,16 @@
 // Farcaster Mini App Webhook Handler
 // Receives notification events from Farcaster clients
-// Uses @farcaster/miniapp-node for proper event parsing and verification
+// Stores notification tokens in Supabase for sending notifications later
 
 import { parseWebhookEvent, verifyAppKeyWithNeynar } from "@farcaster/miniapp-node";
+import { createClient } from '@supabase/supabase-js';
+
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+
+const supabase = supabaseUrl && supabaseServiceKey
+    ? createClient(supabaseUrl, supabaseServiceKey)
+    : null;
 
 export default async function handler(req, res) {
     // Only accept POST requests
@@ -33,27 +41,30 @@ export default async function handler(req, res) {
         switch (event.event) {
             case 'miniapp_added':
                 console.log(`User ${fid} added the mini app`);
-                if (event.notificationDetails) {
-                    // Store notification token for this user
-                    console.log('Notification details:', event.notificationDetails);
+                if (event.notificationDetails && supabase) {
+                    await storeNotificationToken(fid, event.notificationDetails);
                 }
                 break;
 
             case 'miniapp_removed':
                 console.log(`User ${fid} removed the mini app`);
+                if (supabase) {
+                    await deleteNotificationToken(fid);
+                }
                 break;
 
             case 'notifications_enabled':
                 console.log(`User ${fid} enabled notifications`);
-                // Store notification details for sending notifications later
-                if (event.notificationDetails) {
-                    console.log('Notification token:', event.notificationDetails.token);
-                    console.log('Notification URL:', event.notificationDetails.url);
+                if (event.notificationDetails && supabase) {
+                    await storeNotificationToken(fid, event.notificationDetails);
                 }
                 break;
 
             case 'notifications_disabled':
                 console.log(`User ${fid} disabled notifications`);
+                if (supabase) {
+                    await deleteNotificationToken(fid);
+                }
                 break;
 
             default:
@@ -64,5 +75,52 @@ export default async function handler(req, res) {
     } catch (error) {
         console.error('Webhook error:', error);
         return res.status(500).json({ error: 'Internal server error' });
+    }
+}
+
+// Store notification token in Supabase
+async function storeNotificationToken(fid, notificationDetails) {
+    if (!supabase) return;
+
+    try {
+        // Upsert (insert or update) the token
+        const { error } = await supabase
+            .from('notification_tokens')
+            .upsert({
+                fid: fid,
+                token: notificationDetails.token,
+                url: notificationDetails.url,
+                updated_at: new Date().toISOString()
+            }, {
+                onConflict: 'fid'
+            });
+
+        if (error) {
+            console.error('Failed to store notification token:', error);
+        } else {
+            console.log(`Stored notification token for FID ${fid}`);
+        }
+    } catch (error) {
+        console.error('Error storing notification token:', error);
+    }
+}
+
+// Delete notification token from Supabase
+async function deleteNotificationToken(fid) {
+    if (!supabase) return;
+
+    try {
+        const { error } = await supabase
+            .from('notification_tokens')
+            .delete()
+            .eq('fid', fid);
+
+        if (error) {
+            console.error('Failed to delete notification token:', error);
+        } else {
+            console.log(`Deleted notification token for FID ${fid}`);
+        }
+    } catch (error) {
+        console.error('Error deleting notification token:', error);
     }
 }

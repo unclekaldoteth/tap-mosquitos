@@ -1,17 +1,21 @@
 /* ============================================
-   TAP THAT MOSQUITO - LEADERBOARD
-   Local storage based leaderboard system
+   TAP THAT MOSQUITO - GLOBAL LEADERBOARD
+   Uses Supabase API with localStorage fallback
    ============================================ */
 
 const LEADERBOARD_KEY = 'mosquito-leaderboard';
 const MAX_ENTRIES = 10;
+const API_URL = '/api/leaderboard';
 
 class LeaderboardManager {
     constructor() {
-        this.entries = this.load();
+        this.entries = [];
+        this.localEntries = this.loadLocal();
+        this.isOnline = false;
     }
 
-    load() {
+    // Load from localStorage (fallback)
+    loadLocal() {
         try {
             const data = localStorage.getItem(LEADERBOARD_KEY);
             return data ? JSON.parse(data) : [];
@@ -20,16 +24,45 @@ class LeaderboardManager {
         }
     }
 
-    save() {
+    // Save to localStorage
+    saveLocal() {
         try {
-            localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(this.entries));
+            localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(this.localEntries));
         } catch (e) {
-            console.warn('Failed to save leaderboard:', e);
+            console.warn('Failed to save local leaderboard:', e);
         }
     }
 
+    // Fetch global leaderboard from API
+    async fetchGlobal() {
+        try {
+            const response = await fetch(API_URL);
+            if (response.ok) {
+                const data = await response.json();
+                this.entries = (data.entries || []).map(entry => ({
+                    score: entry.score,
+                    address: entry.wallet_address,
+                    username: entry.username,
+                    displayAddress: entry.username || this.formatAddress(entry.wallet_address),
+                    tapped: entry.tapped,
+                    bestCombo: entry.best_combo,
+                    timestamp: new Date(entry.created_at).getTime(),
+                }));
+                this.isOnline = true;
+                return this.entries;
+            }
+        } catch (error) {
+            console.log('Using local leaderboard:', error.message);
+        }
+
+        // Fallback to local
+        this.isOnline = false;
+        this.entries = this.localEntries;
+        return this.entries;
+    }
+
     // Add a new score entry
-    addScore(score, address = null, username = null, stats = {}) {
+    async addScore(score, address = null, username = null, stats = {}) {
         const entry = {
             score,
             address: address || 'Anonymous',
@@ -40,18 +73,42 @@ class LeaderboardManager {
             timestamp: Date.now(),
         };
 
-        this.entries.push(entry);
+        // Try to submit to API
+        let rank = -1;
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    walletAddress: address,
+                    username: username,
+                    score: score,
+                    tapped: stats.tapped || 0,
+                    bestCombo: stats.bestCombo || 1
+                })
+            });
 
-        // Sort by score descending
-        this.entries.sort((a, b) => b.score - a.score);
+            if (response.ok) {
+                const data = await response.json();
+                rank = data.rank || -1;
+                this.isOnline = true;
+                // Refresh global leaderboard
+                await this.fetchGlobal();
+                return rank;
+            }
+        } catch (error) {
+            console.log('API submit failed, saving locally:', error.message);
+        }
 
-        // Keep only top entries
-        this.entries = this.entries.slice(0, MAX_ENTRIES);
+        // Fallback: save locally
+        this.isOnline = false;
+        this.localEntries.push(entry);
+        this.localEntries.sort((a, b) => b.score - a.score);
+        this.localEntries = this.localEntries.slice(0, MAX_ENTRIES);
+        this.saveLocal();
+        this.entries = this.localEntries;
 
-        this.save();
-
-        // Return the rank (1-indexed, or -1 if not in top 10)
-        const rank = this.entries.findIndex(e =>
+        rank = this.localEntries.findIndex(e =>
             e.timestamp === entry.timestamp && e.score === entry.score
         );
 
@@ -60,20 +117,24 @@ class LeaderboardManager {
 
     // Get all leaderboard entries
     getAll() {
-        return this.entries;
+        return this.entries.length > 0 ? this.entries : this.localEntries;
     }
 
     // Get player's best score
     getBestScore(address) {
         if (!address) return null;
-        const playerEntries = this.entries.filter(e => e.address === address);
+        const all = this.getAll();
+        const playerEntries = all.filter(e =>
+            e.address && e.address.toLowerCase() === address.toLowerCase()
+        );
         return playerEntries.length > 0 ? playerEntries[0] : null;
     }
 
     // Check if score qualifies for leaderboard
     isHighScore(score) {
-        if (this.entries.length < MAX_ENTRIES) return true;
-        return score > this.entries[this.entries.length - 1].score;
+        const all = this.getAll();
+        if (all.length < MAX_ENTRIES) return true;
+        return score > all[all.length - 1].score;
     }
 
     // Format address for display
@@ -83,23 +144,23 @@ class LeaderboardManager {
         return `${address.slice(0, 4)}..${address.slice(-4)}`;
     }
 
-    // Update username for existing entries with this address
+    // Update username for existing entries with this address (local only)
     updateUsername(address, username) {
         if (!address || !username) return;
 
         let updated = false;
-        this.entries.forEach(entry => {
+        this.localEntries.forEach(entry => {
             if (entry.address && entry.address.toLowerCase() === address.toLowerCase()) {
                 if (entry.username !== username) {
                     entry.username = username;
-                    entry.displayAddress = username; // Ensure display address is also updated
+                    entry.displayAddress = username;
                     updated = true;
                 }
             }
         });
 
         if (updated) {
-            this.save();
+            this.saveLocal();
         }
     }
 
@@ -112,6 +173,10 @@ class LeaderboardManager {
         return { tier: 'common', name: 'Beginner', color: '#6b7280' };
     }
 
+    // Check if using global or local leaderboard
+    isGlobal() {
+        return this.isOnline;
+    }
 }
 
 export const leaderboard = new LeaderboardManager();

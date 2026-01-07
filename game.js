@@ -685,7 +685,7 @@ class Game {
             const saved = await this.addFrame();
             if (saved) {
                 this.enableNotificationsBtn.textContent = '✅ NOTIFICATIONS ENABLED';
-                this.setChallengeStatus('Notifications enabled. You can receive challenge alerts.', false);
+                this.setChallengeStatus('Ready for battle! Alerts enabled.', false);
             } else {
                 this.enableNotificationsBtn.textContent = originalText;
                 this.setChallengeStatus('Notification opt-in skipped.', true);

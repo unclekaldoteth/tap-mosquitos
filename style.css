@@ -264,6 +264,21 @@ body {
     display: none;
 }
 
+.challenge-status {
+    font-size: 10px;
+    margin-top: 12px;
+    margin-bottom: 8px;
+    min-height: 14px;
+    line-height: 1.4;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+    text-shadow: 1px 1px 0 #000;
+    max-width: 90%;
+    margin-left: auto;
+    margin-right: auto;
+}
+
 #challenge-received-modal {
     z-index: 200;
 }

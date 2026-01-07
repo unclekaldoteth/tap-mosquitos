@@ -276,6 +276,11 @@ npx hardhat run scripts/deploy.js --network baseMainnet
 - [x] Normalized wallet address matching
 - [x] Improved referral system (username-only codes)
 - [x] FID-based notification token storage
+- [x] Full Farcaster-based challenge system (create, accept, decline)
+- [x] FID and username-based opponent lookup
+- [x] Challenge notification opt-in button
+- [x] Revamped Challenge Modal with glassmorphism design
+- [x] Polished notification status messages
 
 ---
 

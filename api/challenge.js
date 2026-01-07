@@ -125,7 +125,7 @@ async function acceptChallenge(req, res) {
     }
 
     // Notify challenger that challenge was accepted
-    await sendAcceptedNotification(challenge.challenger_fid, challenge.opponent_username);
+    await sendAcceptedNotification(challenge.challenger_fid, challenge.opponent_username, challenge.id);
 
     return res.status(200).json({ success: true, challenge });
 }
@@ -291,58 +291,87 @@ async function lookupFidByUsername(username) {
     return null;
 }
 
-// Helper: Send challenge notification
-async function sendChallengeNotification(opponentFid, challengerUsername, challengeId) {
-    const { data: tokens } = await supabase
+function normalizeUsername(username) {
+    if (typeof username !== 'string') return null;
+    const trimmed = username.trim();
+    if (!trimmed) return null;
+    const normalized = trimmed.startsWith('@') ? trimmed.slice(1) : trimmed;
+    if (!normalized || normalized.toLowerCase() === 'connected') return null;
+    return normalized;
+}
+
+function formatUsername(username) {
+    const normalized = normalizeUsername(username);
+    return normalized ? `@${normalized}` : 'Someone';
+}
+
+async function fetchNotificationTokens(fid) {
+    if (!supabase || fid === null || fid === undefined) return [];
+    const parsedFid = Number.parseInt(fid, 10);
+    if (!Number.isFinite(parsedFid)) return [];
+    const { data, error } = await supabase
         .from('notification_tokens')
         .select('token, url')
-        .eq('fid', opponentFid)
-        .single();
+        .eq('fid', parsedFid);
 
-    if (!tokens) return;
+    if (error) {
+        console.error('Failed to load notification tokens:', error);
+        return [];
+    }
 
-    try {
-        await fetch(tokens.url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                notificationId: `challenge-${challengeId}`,
-                title: '🎮 Challenge Received!',
-                body: `@${challengerUsername} challenged you to Tap That Mosquito!`,
-                targetUrl: `${APP_URL}?challenge=${challengeId}`,
-                tokens: [tokens.token]
-            })
-        });
-    } catch (e) {
-        console.error('Failed to send challenge notification:', e);
+    return data || [];
+}
+
+async function sendNotification(tokens, payload) {
+    if (!tokens || tokens.length === 0) return;
+
+    const grouped = new Map();
+    for (const item of tokens) {
+        if (!item?.token || !item?.url) continue;
+        if (!grouped.has(item.url)) {
+            grouped.set(item.url, []);
+        }
+        grouped.get(item.url).push(item.token);
+    }
+
+    for (const [url, tokenList] of grouped.entries()) {
+        if (!tokenList.length) continue;
+        try {
+            await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...payload, tokens: tokenList })
+            });
+        } catch (e) {
+            console.error('Failed to send notification:', e);
+        }
     }
 }
 
+// Helper: Send challenge notification
+async function sendChallengeNotification(opponentFid, challengerUsername, challengeId) {
+    const tokens = await fetchNotificationTokens(opponentFid);
+    if (!tokens.length) return;
+
+    await sendNotification(tokens, {
+        notificationId: `challenge-${challengeId}-${opponentFid}`,
+        title: '🎮 Challenge Received!',
+        body: `${formatUsername(challengerUsername)} challenged you to Tap That Mosquito!`,
+        targetUrl: `${APP_URL}?challenge=${challengeId}`
+    });
+}
+
 // Helper: Send accepted notification
-async function sendAcceptedNotification(challengerFid, opponentUsername) {
-    const { data: tokens } = await supabase
-        .from('notification_tokens')
-        .select('token, url')
-        .eq('fid', challengerFid)
-        .single();
+async function sendAcceptedNotification(challengerFid, opponentUsername, challengeId) {
+    const tokens = await fetchNotificationTokens(challengerFid);
+    if (!tokens.length) return;
 
-    if (!tokens) return;
-
-    try {
-        await fetch(tokens.url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                notificationId: `accepted-${Date.now()}`,
-                title: '✅ Challenge Accepted!',
-                body: `@${opponentUsername} accepted your challenge!`,
-                targetUrl: APP_URL,
-                tokens: [tokens.token]
-            })
-        });
-    } catch (e) {
-        console.error('Failed to send accepted notification:', e);
-    }
+    await sendNotification(tokens, {
+        notificationId: `accepted-${challengeId}-${challengerFid}`,
+        title: '✅ Challenge Accepted!',
+        body: `${formatUsername(opponentUsername)} accepted your challenge!`,
+        targetUrl: `${APP_URL}?challenge=${challengeId}`
+    });
 }
 
 // Helper: Send result notification
@@ -351,71 +380,41 @@ async function sendResultNotification(challenge) {
     const loserFid = winnerFid === challenge.challenger_fid
         ? challenge.opponent_fid
         : challenge.challenger_fid;
+    const challengerScore = challenge.challenger_score || 0;
+    const opponentScore = challenge.opponent_score || 0;
 
     // Notify winner
     if (winnerFid) {
-        const { data: winnerTokens } = await supabase
-            .from('notification_tokens')
-            .select('token, url')
-            .eq('fid', winnerFid)
-            .single();
-
-        if (winnerTokens) {
-            await fetch(winnerTokens.url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    notificationId: `win-${challenge.id}`,
-                    title: '🏆 Victory!',
-                    body: `You won! ${challenge.challenger_score} - ${challenge.opponent_score}`,
-                    targetUrl: APP_URL,
-                    tokens: [winnerTokens.token]
-                })
-            });
-        }
+        const winnerTokens = await fetchNotificationTokens(winnerFid);
+        const winnerScore = winnerFid === challenge.challenger_fid ? challengerScore : opponentScore;
+        const loserScore = winnerFid === challenge.challenger_fid ? opponentScore : challengerScore;
+        await sendNotification(winnerTokens, {
+            notificationId: `win-${challenge.id}-${winnerFid}`,
+            title: '🏆 Victory!',
+            body: `You won! ${winnerScore} - ${loserScore}`,
+            targetUrl: `${APP_URL}?challenge=${challenge.id}`
+        });
 
         // Notify loser
-        const { data: loserTokens } = await supabase
-            .from('notification_tokens')
-            .select('token, url')
-            .eq('fid', loserFid)
-            .single();
-
-        if (loserTokens) {
-            await fetch(loserTokens.url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    notificationId: `loss-${challenge.id}`,
-                    title: '😤 Defeated!',
-                    body: `You lost ${challenge.challenger_score} - ${challenge.opponent_score}. Rematch?`,
-                    targetUrl: APP_URL,
-                    tokens: [loserTokens.token]
-                })
-            });
-        }
+        const loserTokens = await fetchNotificationTokens(loserFid);
+        const loserScore = loserFid === challenge.challenger_fid ? challengerScore : opponentScore;
+        const winnerScoreForLoser = loserFid === challenge.challenger_fid ? opponentScore : challengerScore;
+        await sendNotification(loserTokens, {
+            notificationId: `loss-${challenge.id}-${loserFid}`,
+            title: '😤 Defeated!',
+            body: `You lost ${loserScore} - ${winnerScoreForLoser}. Rematch?`,
+            targetUrl: `${APP_URL}?challenge=${challenge.id}`
+        });
     } else {
         // Tie - notify both
         for (const fid of [challenge.challenger_fid, challenge.opponent_fid]) {
-            const { data: tokens } = await supabase
-                .from('notification_tokens')
-                .select('token, url')
-                .eq('fid', fid)
-                .single();
-
-            if (tokens) {
-                await fetch(tokens.url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        notificationId: `tie-${challenge.id}`,
-                        title: '🤝 It\'s a Tie!',
-                        body: `Both scored ${challenge.challenger_score}! Rematch?`,
-                        targetUrl: APP_URL,
-                        tokens: [tokens.token]
-                    })
-                });
-            }
+            const tokens = await fetchNotificationTokens(fid);
+            await sendNotification(tokens, {
+                notificationId: `tie-${challenge.id}-${fid}`,
+                title: '🤝 It\'s a Tie!',
+                body: `Both scored ${challengerScore}! Rematch?`,
+                targetUrl: `${APP_URL}?challenge=${challenge.id}`
+            });
         }
     }
 }

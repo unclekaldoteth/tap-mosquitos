@@ -266,6 +266,17 @@ npx hardhat run scripts/deploy.js --network baseSepolia
 - [x] Sponsor NFT for Gold+ donors
 - [x] Permanent game boosts for Silver+ sponsors
 
+### Phase 8 - UX Polish and Mainnet (Completed)
+- [x] Wallet-gated homepage (game hidden until connected)
+- [x] Neon Arcade UI revamp with premium buttons
+- [x] Leaderboard modal accessible from homepage
+- [x] VersusNFT deployed to Base Mainnet
+- [x] Challenge expiration (7-day timeout)
+- [x] Username sanitization and leaderboard deduplication
+- [x] Normalized wallet address matching
+- [x] Improved referral system (username-only codes)
+- [x] FID-based notification token storage
+
 ---
 
 ## Prize Pool

@@ -35,17 +35,23 @@ export default async function handler(req, res) {
             return res.status(400).json({ error: 'Missing token' });
         }
 
+        const parsedFid = Number.parseInt(fid, 10);
+        if (!Number.isFinite(parsedFid)) {
+            return res.status(400).json({ error: 'Missing or invalid fid' });
+        }
+
         // Store or update the notification token
         const { error } = await supabase
             .from('notification_tokens')
-            .upsert({
-                token: token,
-                url: url || 'https://tap-mosquito.vercel.app',
-                fid: fid || null,
-                updated_at: new Date().toISOString()
-            }, {
-                onConflict: 'token'
-            });
+            .upsert(
+                {
+                    fid: parsedFid,
+                    token: token,
+                    url: url || 'https://tap-mosquito.vercel.app',
+                    updated_at: new Date().toISOString()
+                },
+                { onConflict: 'fid' }
+            );
 
         if (error) {
             console.error('Failed to store token:', error);

@@ -101,6 +101,7 @@ class Game {
         // Wallet state
         this.walletAddress = null;
         this.username = null; // Farcaster username
+        this.fid = null;
         this.isConnecting = false;
 
         // Versus mode state
@@ -373,6 +374,9 @@ class Game {
 
                 if (context?.user) {
                     const user = context.user;
+                    if (user?.fid) {
+                        this.fid = user.fid;
+                    }
                     const address = user.connectedAddress || user.wallet?.address || null;
 
                     // Try multiple sources for username
@@ -419,6 +423,9 @@ class Game {
                     if (token) {
                         // Get user context for address and username
                         const context = await sdk.context;
+                        if (context?.user?.fid) {
+                            this.fid = context.user.fid;
+                        }
                         let address = context?.user?.connectedAddress || context?.user?.wallet?.address || null;
 
                         // Preserve existing username if context doesn't have one
@@ -773,6 +780,7 @@ class Game {
                 console.log('Signed in with Farcaster:', result.fid);
                 // Store authenticated FID
                 this.authenticatedFid = result.fid;
+                this.fid = result.fid;
                 this.authSignature = result.signature;
                 this.authMessage = result.message;
                 return result;
@@ -795,14 +803,38 @@ class Game {
                 // Send token to backend for notifications
                 if (result.token) {
                     try {
-                        await fetch('/api/notification-tokens', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                token: result.token,
-                                url: result.url || 'https://tap-mosquito.vercel.app'
-                            })
-                        });
+                        let fid = this.fid || this.authenticatedFid;
+                        if (!fid) {
+                            try {
+                                const isInMiniApp = await sdk.isInMiniApp();
+                                if (isInMiniApp) {
+                                    const context = await sdk.context;
+                                    if (context?.user?.fid) {
+                                        fid = context.user.fid;
+                                        this.fid = fid;
+                                    }
+                                }
+                            } catch (e) {
+                                console.log('Failed to load fid for notifications:', e.message);
+                            }
+                        }
+                        if (!fid) {
+                            console.log('Skipping notification token save: missing fid.');
+                        } else {
+                            const response = await fetch('/api/notification-tokens', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    token: result.token,
+                                    url: result.url || 'https://tap-mosquito.vercel.app',
+                                    fid
+                                })
+                            });
+                            if (!response.ok) {
+                                const detail = await response.text();
+                                console.log('Failed to save notification token:', detail || response.statusText);
+                            }
+                        }
                     } catch (e) {
                         console.log('Failed to save notification token:', e.message);
                     }

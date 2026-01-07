@@ -56,16 +56,33 @@ export default async function handler(req, res) {
 
 // Create a new challenge
 async function createChallenge(req, res) {
-    const { challengerFid, challengerUsername, opponentUsername } = req.body;
+    const { challengerFid, challengerUsername, opponentUsername, opponentFid } = req.body;
 
-    if (!challengerFid || !opponentUsername) {
+    if (!challengerFid || (!opponentUsername && opponentFid === undefined && opponentFid === null)) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    // Look up opponent FID from username (using Neynar or stored data)
-    const opponentFid = await lookupFidByUsername(opponentUsername);
-    if (!opponentFid) {
-        return res.status(404).json({ error: 'User not found' });
+    const normalizedOpponentUsername = normalizeUsername(opponentUsername);
+    const normalizedChallengerUsername = normalizeUsername(challengerUsername);
+    let resolvedOpponentFid = null;
+
+    if (opponentFid !== undefined && opponentFid !== null && opponentFid !== '') {
+        const parsedFid = Number.parseInt(opponentFid, 10);
+        if (!Number.isFinite(parsedFid)) {
+            return res.status(400).json({ error: 'Invalid opponent FID' });
+        }
+        resolvedOpponentFid = parsedFid;
+    } else {
+        // Look up opponent FID from username (using Neynar or stored data)
+        const lookup = await lookupFidByUsername(opponentUsername);
+        if (!lookup.fid) {
+            const status = lookup.reason === 'neynar_missing' ? 503 : 404;
+            const message = lookup.reason === 'neynar_missing'
+                ? 'User lookup unavailable. Please try again later.'
+                : 'User not found. Use a Farcaster username (not ENS).';
+            return res.status(status).json({ error: message });
+        }
+        resolvedOpponentFid = lookup.fid;
     }
 
     // Check for existing pending challenge within 24h
@@ -73,7 +90,7 @@ async function createChallenge(req, res) {
         .from('challenges')
         .select('id')
         .eq('challenger_fid', challengerFid)
-        .eq('opponent_fid', opponentFid)
+        .eq('opponent_fid', resolvedOpponentFid)
         .in('status', ['pending', 'accepted'])
         .gte('created_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
         .single();
@@ -87,9 +104,9 @@ async function createChallenge(req, res) {
         .from('challenges')
         .insert({
             challenger_fid: challengerFid,
-            opponent_fid: opponentFid,
-            challenger_username: challengerUsername,
-            opponent_username: opponentUsername,
+            opponent_fid: resolvedOpponentFid,
+            challenger_username: normalizedChallengerUsername,
+            opponent_username: normalizedOpponentUsername,
             status: 'pending'
         })
         .select()
@@ -98,7 +115,7 @@ async function createChallenge(req, res) {
     if (error) throw error;
 
     // Send notification to opponent
-    await sendChallengeNotification(opponentFid, challengerUsername, challenge.id);
+    await sendChallengeNotification(resolvedOpponentFid, normalizedChallengerUsername, challenge.id);
 
     return res.status(200).json({ success: true, challenge });
 }
@@ -269,26 +286,31 @@ async function getActiveChallenge(req, res) {
 
 // Helper: Look up FID by username (mock - replace with Neynar API)
 async function lookupFidByUsername(username) {
-    // Clean username
-    const cleanUsername = username.replace('@', '').toLowerCase();
-
-    // Try to find in notification_tokens or use Neynar API
-    const neynarApiKey = process.env.NEYNAR_API_KEY;
-    if (neynarApiKey) {
-        try {
-            const response = await fetch(
-                `https://api.neynar.com/v2/farcaster/user/search?q=${cleanUsername}&limit=1`,
-                { headers: { 'api_key': neynarApiKey } }
-            );
-            const data = await response.json();
-            if (data.result?.users?.[0]) {
-                return data.result.users[0].fid;
-            }
-        } catch (e) {
-            console.error('Neynar lookup failed:', e);
-        }
+    const cleanUsername = normalizeUsername(username);
+    if (!cleanUsername) {
+        return { fid: null, reason: 'invalid_username' };
     }
-    return null;
+
+    const neynarApiKey = process.env.NEYNAR_API_KEY || process.env.VITE_NEYNAR_API_KEY;
+    if (!neynarApiKey) {
+        console.error('NEYNAR_API_KEY missing; cannot resolve username to FID.');
+        return { fid: null, reason: 'neynar_missing' };
+    }
+
+    try {
+        const response = await fetch(
+            `https://api.neynar.com/v2/farcaster/user/search?q=${cleanUsername}&limit=1`,
+            { headers: { 'api_key': neynarApiKey } }
+        );
+        const data = await response.json();
+        if (data.result?.users?.[0]) {
+            return { fid: data.result.users[0].fid, reason: null };
+        }
+    } catch (e) {
+        console.error('Neynar lookup failed:', e);
+    }
+
+    return { fid: null, reason: 'not_found' };
 }
 
 function normalizeUsername(username) {

@@ -19,9 +19,26 @@ class ChallengeManager {
     }
 
     // Create a challenge to a user
-    async createChallenge(opponentUsername) {
+    async createChallenge(opponent) {
         if (!this.userFid) {
             throw new Error('Not logged in');
+        }
+
+        let opponentUsername = null;
+        let opponentFid = null;
+
+        if (typeof opponent === 'string') {
+            opponentUsername = opponent;
+        } else if (opponent && typeof opponent === 'object') {
+            opponentUsername = opponent.opponentUsername || opponent.username || null;
+            opponentFid = opponent.opponentFid ?? opponent.fid ?? null;
+        }
+
+        if (opponentUsername) {
+            opponentUsername = opponentUsername.replace(/^@/, '');
+        }
+        if (!opponentUsername && (opponentFid === null || opponentFid === undefined)) {
+            throw new Error('Missing opponent');
         }
 
         const response = await fetch(`${CHALLENGE_API}?action=create`, {
@@ -30,7 +47,8 @@ class ChallengeManager {
             body: JSON.stringify({
                 challengerFid: this.userFid,
                 challengerUsername: this.username,
-                opponentUsername: opponentUsername.replace('@', '')
+                opponentUsername,
+                opponentFid
             })
         });
 

@@ -117,6 +117,7 @@ class Game {
         this.currentBattleId = null;
         this.opponentAddress = null;
         this.opponentUsername = null;
+        this.opponentFid = null;
         this.opponentScore = 0; // Simulated for demo
         this.isWinner = false;
         this.challengeAcceptTimeout = null;
@@ -605,6 +606,7 @@ class Game {
 
     getOpponentLabel() {
         if (this.opponentUsername) return `@${this.opponentUsername}`;
+        if (this.opponentFid) return `FID ${this.opponentFid}`;
         if (this.opponentAddress) return this.formatAddress(this.opponentAddress);
         return 'opponent';
     }
@@ -612,6 +614,11 @@ class Game {
     parseOpponentInput(input) {
         const trimmed = input.trim();
         if (!trimmed) return null;
+
+        const fidMatch = trimmed.match(/^fid[:\s]*(\d+)$/i);
+        if (fidMatch) {
+            return { type: 'fid', value: Number.parseInt(fidMatch[1], 10) };
+        }
 
         const addressPattern = /^0x[a-fA-F0-9]{40}$/;
         if (addressPattern.test(trimmed)) {
@@ -752,6 +759,7 @@ class Game {
             this.currentChallengeId = challenge.id;
             const rawOpponent = challenge.challenger_username || '';
             this.opponentUsername = rawOpponent ? rawOpponent.replace(/^@/, '') : null;
+            this.opponentFid = challenge.challenger_fid || null;
             this.opponentAddress = null;
 
             this.challengeReceivedModal.classList.add('hidden');
@@ -2079,12 +2087,18 @@ Can you beat my score?`;
         const parsedOpponent = this.parseOpponentInput(opponentInput);
 
         if (!parsedOpponent) {
-            alert('Please enter a valid username (e.g. @vitalik) or Ethereum address (0x...)');
+            alert('Please enter a valid username (e.g. @vitalik), FID (fid:1234), or Ethereum address (0x...)');
             return;
         }
 
         if (parsedOpponent.type === 'address') {
             if (parsedOpponent.value.toLowerCase() === this.walletAddress?.toLowerCase()) {
+                alert('You cannot challenge yourself!');
+                return;
+            }
+        } else if (parsedOpponent.type === 'fid') {
+            const selfFid = Number.parseInt(this.fid || this.authenticatedFid, 10);
+            if (Number.isFinite(selfFid) && parsedOpponent.value === selfFid) {
                 alert('You cannot challenge yourself!');
                 return;
             }
@@ -2109,22 +2123,29 @@ Can you beat my score?`;
             }
 
             let opponentUsername = null;
+            let opponentFid = null;
             if (parsedOpponent.type === 'address') {
                 opponentUsername = await this.fetchFarcasterUsername(parsedOpponent.value);
                 if (!opponentUsername) {
                     this.setChallengeStatus('No Farcaster username found for that address.', true);
                     return;
                 }
+            } else if (parsedOpponent.type === 'fid') {
+                opponentFid = parsedOpponent.value;
             } else {
                 opponentUsername = parsedOpponent.value;
             }
 
             this.syncChallengeUser();
-            const challenge = await challengeManager.createChallenge(opponentUsername);
+            const challenge = await challengeManager.createChallenge({
+                opponentUsername,
+                opponentFid
+            });
 
             this.opponentAddress = parsedOpponent.type === 'address' ? parsedOpponent.value : null;
             const rawOpponent = challenge.opponent_username || opponentUsername || '';
             this.opponentUsername = rawOpponent ? rawOpponent.replace(/^@/, '') : null;
+            this.opponentFid = challenge.opponent_fid || opponentFid || null;
             this.currentChallengeId = challenge.id;
 
             // Show waiting screen
@@ -2134,7 +2155,8 @@ Can you beat my score?`;
                 `Waiting for ${this.getOpponentLabel()} to accept...`;
 
             this.startChallengePolling();
-            this.setChallengeStatus(`Challenge sent to @${opponentUsername}`, false);
+            const statusLabel = opponentUsername ? `@${opponentUsername}` : `FID ${opponentFid}`;
+            this.setChallengeStatus(`Challenge sent to ${statusLabel}`, false);
 
             // Prompt to share challenge issued
             const opponentName = this.getOpponentLabel();
@@ -2173,6 +2195,7 @@ Can you beat my score?`;
         this.currentChallengeId = null;
         this.opponentAddress = null;
         this.opponentUsername = null;
+        this.opponentFid = null;
         this.versusWaiting.classList.add('hidden');
         this.versusScreen.classList.remove('hidden');
         this.setChallengeStatus('', false);
@@ -2201,6 +2224,7 @@ Can you beat my score?`;
         this.currentBattleId = null;
         this.opponentAddress = null;
         this.opponentUsername = null;
+        this.opponentFid = null;
         this.versusResultScreen.classList.add('hidden');
         this.startScreen.classList.add('hidden');
         this.versusScreen.classList.remove('hidden');
@@ -2221,6 +2245,7 @@ Can you beat my score?`;
         this.currentBattleId = null;
         this.opponentAddress = null;
         this.opponentUsername = null;
+        this.opponentFid = null;
         this.versusResultScreen.classList.add('hidden');
         this.startScreen.classList.remove('hidden');
     }

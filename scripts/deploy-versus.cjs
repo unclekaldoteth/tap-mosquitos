@@ -9,9 +9,14 @@ async function main() {
     const balance = await hre.ethers.provider.getBalance(deployer.address);
     console.log("Account balance:", hre.ethers.formatEther(balance), "ETH\n");
 
+    // Trusted signer for game result verification
+    // Use SIGNER_ADDRESS from env, or default to deployer address
+    const trustedSigner = process.env.SIGNER_ADDRESS || deployer.address;
+    console.log("Trusted Signer:", trustedSigner);
+
     // Deploy contract
     const VersusNFT = await hre.ethers.getContractFactory("VersusNFT");
-    const nft = await VersusNFT.deploy();
+    const nft = await VersusNFT.deploy(trustedSigner);
 
     await nft.waitForDeployment();
 
@@ -29,7 +34,7 @@ async function main() {
         try {
             await hre.run("verify:verify", {
                 address: address,
-                constructorArguments: [],
+                constructorArguments: [trustedSigner],
             });
             console.log("✅ Contract verified!");
         } catch (error) {

@@ -87,6 +87,36 @@ contract VersusNFT is ERC721, Ownable, ReentrancyGuard {
         trustedSigner = _trustedSigner;
     }
 
+    function _isChallengeExpired(Challenge storage challenge) internal view returns (bool) {
+        return challenge.status == ChallengeStatus.Pending &&
+            block.timestamp > challenge.createdAt + CHALLENGE_TIMEOUT;
+    }
+
+    function _isChallengeActive(Challenge storage challenge) internal view returns (bool) {
+        if (challenge.status == ChallengeStatus.Pending) {
+            return !_isChallengeExpired(challenge);
+        }
+        return challenge.status == ChallengeStatus.Accepted;
+    }
+
+    function _getActiveChallengeCount(address player) internal view returns (uint256) {
+        uint256[] storage allChallenges = playerChallenges[player];
+        uint256 len = allChallenges.length;
+        uint256 count = 0;
+        for (uint256 i = 0; i < len;) {
+            Challenge storage challenge = challenges[allChallenges[i]];
+            if (_isChallengeActive(challenge)) {
+                unchecked {
+                    count++;
+                }
+            }
+            unchecked {
+                ++i;
+            }
+        }
+        return count;
+    }
+
     /**
      * @dev Create a challenge to a specific opponent
      * @param opponent Address of player to challenge
@@ -94,7 +124,7 @@ contract VersusNFT is ERC721, Ownable, ReentrancyGuard {
     function createChallenge(address opponent) external returns (uint256) {
         require(opponent != address(0), "Invalid opponent address");
         require(opponent != msg.sender, "Cannot challenge yourself");
-        require(playerChallenges[msg.sender].length < MAX_ACTIVE_CHALLENGES, "Too many active challenges");
+        require(_getActiveChallengeCount(msg.sender) < MAX_ACTIVE_CHALLENGES, "Too many active challenges");
 
         uint256 challengeId = _challengeIdCounter;
         unchecked {
@@ -124,6 +154,7 @@ contract VersusNFT is ERC721, Ownable, ReentrancyGuard {
         Challenge storage challenge = challenges[challengeId];
         
         require(challenge.status == ChallengeStatus.Pending, "Challenge not pending");
+        require(!_isChallengeExpired(challenge), "Challenge expired");
         require(challenge.opponent == msg.sender, "Not the challenged player");
 
         challenge.status = ChallengeStatus.Accepted;
@@ -471,7 +502,8 @@ contract VersusNFT is ERC721, Ownable, ReentrancyGuard {
 
         // Count pending
         for (uint256 i = 0; i < len;) {
-            if (challenges[allChallenges[i]].status == ChallengeStatus.Pending) {
+            Challenge storage challenge = challenges[allChallenges[i]];
+            if (challenge.status == ChallengeStatus.Pending && !_isChallengeExpired(challenge)) {
                 unchecked {
                     pendingCount++;
                 }
@@ -485,7 +517,8 @@ contract VersusNFT is ERC721, Ownable, ReentrancyGuard {
         uint256[] memory pending = new uint256[](pendingCount);
         uint256 index = 0;
         for (uint256 i = 0; i < len;) {
-            if (challenges[allChallenges[i]].status == ChallengeStatus.Pending) {
+            Challenge storage challenge = challenges[allChallenges[i]];
+            if (challenge.status == ChallengeStatus.Pending && !_isChallengeExpired(challenge)) {
                 pending[index] = allChallenges[i];
                 unchecked {
                     index++;

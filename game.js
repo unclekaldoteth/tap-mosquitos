@@ -111,6 +111,7 @@ class Game {
         this.opponentUsername = null;
         this.opponentScore = 0; // Simulated for demo
         this.isWinner = false;
+        this.challengeAcceptTimeout = null;
         this.winStreak = 0;
         this.totalWins = 0;
         this.previousHighscore = this.highscore;
@@ -596,6 +597,13 @@ class Game {
 
     isValidAddress(address) {
         return typeof address === 'string' && /^0x[a-fA-F0-9]{40}$/.test(address);
+    }
+
+    clearChallengeTimeout() {
+        if (this.challengeAcceptTimeout) {
+            clearTimeout(this.challengeAcceptTimeout);
+            this.challengeAcceptTimeout = null;
+        }
     }
 
     getReadableError(error, fallback) {
@@ -1834,6 +1842,7 @@ Can you beat my score?`;
             alert('Please connect your wallet first to use Versus mode!');
             return;
         }
+        this.clearChallengeTimeout();
         this.isVersusMode = false;
         this.startScreen.classList.add('hidden');
         this.versusResultScreen.classList.add('hidden');
@@ -1841,6 +1850,7 @@ Can you beat my score?`;
     }
 
     hideVersusScreen() {
+        this.clearChallengeTimeout();
         this.versusScreen.classList.add('hidden');
         this.startScreen.classList.remove('hidden');
     }
@@ -1885,7 +1895,10 @@ Can you beat my score?`;
                 `Waiting for ${this.getOpponentLabel()}...`;
 
             // For demo: auto-accept after 2 seconds and start versus game
-            setTimeout(() => {
+            this.clearChallengeTimeout();
+            this.challengeAcceptTimeout = setTimeout(() => {
+                if (!this.currentChallengeId) return;
+                if (this.versusWaiting.classList.contains('hidden')) return;
                 this.startVersusGame();
             }, 2000);
 
@@ -1905,6 +1918,7 @@ Can you beat my score?`;
     }
 
     cancelChallenge() {
+        this.clearChallengeTimeout();
         this.currentChallengeId = null;
         this.opponentAddress = null;
         this.opponentUsername = null;
@@ -1913,6 +1927,7 @@ Can you beat my score?`;
     }
 
     startVersusGame() {
+        this.clearChallengeTimeout();
         this.isVersusMode = true;
         this.versusWaiting.classList.add('hidden');
         this.resetGame();
@@ -1928,6 +1943,7 @@ Can you beat my score?`;
     }
 
     showVersusScreenFromResult() {
+        this.clearChallengeTimeout();
         this.isVersusMode = false;
         this.currentChallengeId = null;
         this.currentBattleId = null;
@@ -1940,12 +1956,14 @@ Can you beat my score?`;
 
     // Go to main menu from game over screen
     goToMainMenu() {
+        this.clearChallengeTimeout();
         this.gameOverScreen.classList.add('hidden');
         this.startScreen.classList.remove('hidden');
         this.loadSponsors(); // Refresh sponsors
     }
 
     backToMainMenu() {
+        this.clearChallengeTimeout();
         this.isVersusMode = false;
         this.currentChallengeId = null;
         this.currentBattleId = null;

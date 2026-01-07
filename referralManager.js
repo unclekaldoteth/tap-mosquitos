@@ -18,14 +18,10 @@ class ReferralManager {
      * Check URL for referral code and process it
      */
     init(walletAddress, fid, username = null) {
-        // Generate user's referral code - prioritize username
+        // Use username-only referral codes for tracking
         if (username) {
             // Use username directly (remove @ if present)
             this.referralCode = username.replace('@', '').toLowerCase();
-        } else if (fid) {
-            this.referralCode = `fid-${fid}`;
-        } else if (walletAddress) {
-            this.referralCode = this.generateCode(walletAddress);
         }
 
         // Check if user came via referral link
@@ -46,11 +42,19 @@ class ReferralManager {
     processReferralFromURL() {
         const urlParams = new URLSearchParams(window.location.search);
         const refCode = urlParams.get('ref');
+        const normalizedRef = refCode ? refCode.replace(/^@/, '').trim().toLowerCase() : null;
 
-        if (refCode && !this.referredBy) {
+        if (normalizedRef && !this.referredBy) {
+            if (this.referralCode && normalizedRef === this.referralCode.toLowerCase()) {
+                // Ignore self-referrals
+                const cleanUrl = window.location.origin + window.location.pathname;
+                window.history.replaceState({}, document.title, cleanUrl);
+                return;
+            }
+
             // New referral - store it
-            this.referredBy = refCode;
-            localStorage.setItem('mosquito-referred-by', refCode);
+            this.referredBy = normalizedRef;
+            localStorage.setItem('mosquito-referred-by', normalizedRef);
 
             // Grant boost to the referred player
             this.pendingReferralBoost = true;
@@ -69,7 +73,8 @@ class ReferralManager {
      */
     getReferralLink() {
         if (!this.referralCode) return APP_URL;
-        return `${APP_URL}?ref=${this.referralCode}`;
+        const baseUrl = APP_URL.endsWith('/') ? APP_URL.slice(0, -1) : APP_URL;
+        return `${baseUrl}/?ref=${encodeURIComponent(this.referralCode)}`;
     }
 
     /**

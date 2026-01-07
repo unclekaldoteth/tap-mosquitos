@@ -1556,6 +1556,9 @@ class Game {
 
             // Track game played for first game detection
             const isFirstGame = shareManager.isFirstGame();
+            if (isFirstGame) {
+                referralManager.onFirstGameComplete();
+            }
             shareManager.trackGamePlayed();
 
             // Prompt contextual shares (don't await, let it run async)
@@ -1736,13 +1739,7 @@ Tapped: ${this.tappedCount} | Best Combo: x${this.bestCombo || 1}
 
 Can you beat my score?`;
 
-        // Try native composeCast first
-        const used = await this.composeCast(text, ['https://tap-mosquito.vercel.app']);
-
-        // Fallback to shareManager if composeCast not available
-        if (!used) {
-            await shareManager.share(text);
-        }
+        await shareManager.share(text);
     }
 
     // Toggle sound on/off

@@ -415,8 +415,8 @@ class Game {
         this.username = username;
         this.walletBtn.classList.add('connected');
 
-        // Initialize referral system with wallet address
-        referralManager.init(address, null);
+        // Initialize referral system with wallet address and username
+        referralManager.init(address, null, username);
 
         // Display username if available, otherwise formatted address
         const displayName = username || this.formatAddress(address);

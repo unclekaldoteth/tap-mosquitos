@@ -17,12 +17,15 @@ class ReferralManager {
      * Initialize referral system on app load
      * Check URL for referral code and process it
      */
-    init(walletAddress, fid) {
-        // Generate user's referral code from wallet or FID
-        if (walletAddress) {
-            this.referralCode = this.generateCode(walletAddress);
+    init(walletAddress, fid, username = null) {
+        // Generate user's referral code - prioritize username
+        if (username) {
+            // Use username directly (remove @ if present)
+            this.referralCode = username.replace('@', '').toLowerCase();
         } else if (fid) {
             this.referralCode = `fid-${fid}`;
+        } else if (walletAddress) {
+            this.referralCode = this.generateCode(walletAddress);
         }
 
         // Check if user came via referral link

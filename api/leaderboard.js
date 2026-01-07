@@ -69,6 +69,16 @@ export default async function handler(req, res) {
             }
 
             const normalizedAddress = walletAddress.toLowerCase();
+            let sanitizedUsername = null;
+            if (typeof username === 'string') {
+                const trimmed = username.trim();
+                if (trimmed) {
+                    const normalized = trimmed.startsWith('@') ? trimmed.slice(1) : trimmed;
+                    if (normalized && normalized.toLowerCase() !== 'connected') {
+                        sanitizedUsername = normalized;
+                    }
+                }
+            }
 
             // Check if user already has an entry this week
             const { data: existing } = await supabase
@@ -91,7 +101,7 @@ export default async function handler(req, res) {
                         score: newScore,
                         tapped: newTapped,
                         best_combo: newBestCombo,
-                        username: username || existing.username // Update username if provided
+                        username: sanitizedUsername || existing.username // Update username if provided
                     })
                     .eq('id', existing.id)
                     .select()
@@ -105,7 +115,7 @@ export default async function handler(req, res) {
                     .from('leaderboard')
                     .insert({
                         wallet_address: normalizedAddress,
-                        username: username || null,
+                        username: sanitizedUsername,
                         score: score,
                         tapped: tapped || 0,
                         best_combo: bestCombo || 1,

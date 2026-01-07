@@ -38,6 +38,60 @@ class LeaderboardManager {
         return typeof address === 'string' ? address.toLowerCase() : null;
     }
 
+    // Sanitize username for display and storage
+    sanitizeUsername(username) {
+        if (typeof username !== 'string') return null;
+        const trimmed = username.trim();
+        if (!trimmed) return null;
+        return trimmed.startsWith('@') ? trimmed.slice(1) : trimmed;
+    }
+
+    // Normalize usernames for consistent comparison
+    normalizeUsername(username) {
+        const sanitized = this.sanitizeUsername(username);
+        if (!sanitized) return null;
+        const normalized = sanitized.toLowerCase();
+        if (normalized === 'connected') return null;
+        return normalized;
+    }
+
+    // Deduplicate entries by username (preferred) or address
+    dedupeEntries(entries) {
+        const byKey = new Map();
+
+        for (const entry of entries) {
+            const normalizedUsername = this.normalizeUsername(entry.username);
+            const normalizedAddress = entry.address && entry.address !== 'Anonymous'
+                ? this.normalizeAddress(entry.address)
+                : null;
+            const key = normalizedUsername
+                ? `u:${normalizedUsername}`
+                : normalizedAddress
+                    ? `a:${normalizedAddress}`
+                    : `t:${entry.timestamp || 0}:${entry.score || 0}`;
+
+            const existing = byKey.get(key);
+            if (!existing) {
+                byKey.set(key, entry);
+                continue;
+            }
+
+            const existingScore = existing.score || 0;
+            const entryScore = entry.score || 0;
+            const existingTime = existing.timestamp || 0;
+            const entryTime = entry.timestamp || 0;
+
+            if (entryScore > existingScore || (entryScore === existingScore && entryTime > existingTime)) {
+                byKey.set(key, entry);
+            }
+        }
+
+        return Array.from(byKey.values()).sort((a, b) => {
+            if (b.score !== a.score) return b.score - a.score;
+            return (b.timestamp || 0) - (a.timestamp || 0);
+        });
+    }
+
     // Fetch global leaderboard from API
     async fetchGlobal() {
         try {
@@ -47,8 +101,8 @@ class LeaderboardManager {
                 this.entries = (data.entries || []).map(entry => ({
                     score: entry.score,
                     address: this.normalizeAddress(entry.wallet_address) || entry.wallet_address,
-                    username: entry.username,
-                    displayAddress: entry.username || this.formatAddress(entry.wallet_address),
+                    username: this.sanitizeUsername(entry.username),
+                    displayAddress: this.sanitizeUsername(entry.username) || this.formatAddress(entry.wallet_address),
                     tapped: entry.tapped,
                     bestCombo: entry.best_combo,
                     timestamp: new Date(entry.created_at).getTime(),
@@ -69,11 +123,12 @@ class LeaderboardManager {
     // Add a new score entry
     async addScore(score, address = null, username = null, stats = {}) {
         const normalizedAddress = address ? this.normalizeAddress(address) : null;
+        const sanitizedUsername = this.sanitizeUsername(username);
         const entry = {
             score,
             address: normalizedAddress || address || 'Anonymous',
-            username: username || null,
-            displayAddress: username || this.formatAddress(address),
+            username: sanitizedUsername || null,
+            displayAddress: sanitizedUsername || this.formatAddress(address),
             tapped: stats.tapped || 0,
             bestCombo: stats.bestCombo || 1,
             timestamp: Date.now(),
@@ -87,7 +142,7 @@ class LeaderboardManager {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     walletAddress: normalizedAddress,
-                    username: username,
+                    username: sanitizedUsername,
                     score: score,
                     tapped: stats.tapped || 0,
                     bestCombo: stats.bestCombo || 1
@@ -123,7 +178,8 @@ class LeaderboardManager {
 
     // Get all leaderboard entries
     getAll() {
-        return this.entries.length > 0 ? this.entries : this.localEntries;
+        const entries = this.entries.length > 0 ? this.entries : this.localEntries;
+        return this.dedupeEntries(entries);
     }
 
     // Get player's best score
@@ -156,13 +212,16 @@ class LeaderboardManager {
     updateUsername(address, username) {
         if (!address || !username) return;
 
+        const sanitizedUsername = this.sanitizeUsername(username);
+        if (!sanitizedUsername) return;
+
         let updated = false;
         const normalizedAddress = this.normalizeAddress(address);
         this.localEntries.forEach(entry => {
             if (entry.address && this.normalizeAddress(entry.address) === normalizedAddress) {
-                if (entry.username !== username) {
-                    entry.username = username;
-                    entry.displayAddress = username;
+                if (entry.username !== sanitizedUsername) {
+                    entry.username = sanitizedUsername;
+                    entry.displayAddress = sanitizedUsername;
                     updated = true;
                 }
             }

@@ -156,7 +156,7 @@ export const ChallengeStatus = {
 
 // Contract addresses (deployed)
 export const VERSUS_CONTRACT_ADDRESSES = {
-    mainnet: "0xE69383EB9e7abEbA27d718D1E3Ceb5d11e4075d5",
+    mainnet: "0x0cb3B5B40491F9c1b5f62Eb1094eF4BAE518a464",
     sepolia: "0x0F48Fd7aAC0A3e4FE75029b618b32a66266666B5"
 };
 

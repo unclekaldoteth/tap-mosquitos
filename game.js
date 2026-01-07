@@ -350,7 +350,10 @@ class Game {
                         // Get user context for address and username
                         const context = await sdk.context;
                         const address = context?.user?.connectedAddress || 'Connected';
-                        const username = context?.user?.username || context?.user?.displayName || null;
+
+                        // Preserve existing username if context doesn't have one
+                        const contextUsername = context?.user?.username || context?.user?.displayName || null;
+                        const username = contextUsername || this.username;
 
                         // Store the auth token for future authenticated requests
                         this.authToken = token;

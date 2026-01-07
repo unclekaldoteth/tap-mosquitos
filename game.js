@@ -134,6 +134,9 @@ class Game {
         try {
             sdk.actions.ready();
             console.log('SDK ready signal sent');
+
+            // Set up primary button for start screen
+            this.updatePrimaryButton('SOLO GAME', () => this.startGame());
         } catch (e) {
             console.log('SDK ready failed:', e.message);
         }
@@ -491,6 +494,68 @@ class Game {
         }, 2000);
     }
 
+    // ============================================
+    // SDK ACTIONS - MiniKit Integration
+    // ============================================
+
+    // Update the native Primary Button
+    updatePrimaryButton(text, callback) {
+        try {
+            sdk.actions.setPrimaryButton({ text }, callback);
+            console.log('Primary button set:', text);
+        } catch (e) {
+            console.log('Primary button not available:', e.message);
+        }
+    }
+
+    // Hide the native Primary Button
+    hidePrimaryButton() {
+        try {
+            sdk.actions.setPrimaryButton({ text: '', hidden: true }, () => { });
+            console.log('Primary button hidden');
+        } catch (e) {
+            console.log('Hide primary button failed:', e.message);
+        }
+    }
+
+    // Open native cast composer with prefilled content
+    async composeCast(text, embeds = []) {
+        try {
+            await sdk.actions.composeCast({ text, embeds });
+            console.log('Compose cast opened');
+            return true;
+        } catch (e) {
+            console.log('composeCast not available:', e.message);
+            // Fallback to URL share
+            return false;
+        }
+    }
+
+    // View a user's profile by FID
+    async viewProfile(fid) {
+        if (!fid) return;
+        try {
+            await sdk.actions.viewProfile({ fid });
+            console.log('View profile:', fid);
+        } catch (e) {
+            console.log('viewProfile not available:', e.message);
+        }
+    }
+
+    // Close the mini app
+    async closeMiniApp() {
+        try {
+            await sdk.actions.close();
+            console.log('Mini app closed');
+        } catch (e) {
+            console.log('close not available:', e.message);
+        }
+    }
+
+    // ============================================
+    // END SDK ACTIONS
+    // ============================================
+
     loadHighscore() {
         return parseInt(localStorage.getItem('mosquito-highscore')) || 0;
     }
@@ -507,6 +572,9 @@ class Game {
         this.startTimers();
         this.spawnMosquito();
         soundManager.playStart();
+
+        // Hide primary button during gameplay
+        this.hidePrimaryButton();
     }
 
     restartGame() {
@@ -1214,6 +1282,9 @@ class Game {
         setTimeout(() => {
             this.gameOverScreen.classList.remove('hidden');
 
+            // Show Primary Button for Play Again
+            this.updatePrimaryButton('PLAY AGAIN', () => this.restartGame());
+
             // Track game played for first game detection
             const isFirstGame = shareManager.isFirstGame();
             shareManager.trackGamePlayed();
@@ -1317,15 +1388,26 @@ class Game {
                     : '???';
             }
 
+            // Add data-fid for profile viewing if available
+            const fidAttr = entry.fid ? `data-fid="${entry.fid}"` : '';
+            const clickableClass = entry.fid ? 'clickable' : '';
 
             return `
                 <div class="leaderboard-entry ${isCurrentPlayer ? 'current-player' : ''}">
                     <span class="leaderboard-rank ${rankClass}">#${index + 1}</span>
-                    <span class="leaderboard-name">${nameDisplay}</span>
+                    <span class="leaderboard-name ${clickableClass}" ${fidAttr}>${nameDisplay}</span>
                     <span class="leaderboard-score">${entry.score}</span>
                 </div>
             `;
         }).join('');
+
+        // Add click handlers for viewing profiles
+        this.leaderboardEl.querySelectorAll('.leaderboard-name.clickable').forEach(el => {
+            el.addEventListener('click', (e) => {
+                const fid = parseInt(e.target.dataset.fid);
+                if (fid) this.viewProfile(fid);
+            });
+        });
     }
 
     // Share score to Farcaster with contextual options
@@ -1345,15 +1427,21 @@ class Game {
             return;
         }
 
-        // Default share (general score share)
-        const text = `I scored ${this.score} points in Tap That Mosquito!
+        // Default share content
+        const text = `🦟 I scored ${this.score} points in Tap That Mosquito!
 
 ${achievement.name} Tier
 Tapped: ${this.tappedCount} | Best Combo: x${this.bestCombo || 1}
 
 Can you beat my score?`;
 
-        await shareManager.share(text);
+        // Try native composeCast first
+        const used = await this.composeCast(text, ['https://tap-mosquito.vercel.app']);
+
+        // Fallback to shareManager if composeCast not available
+        if (!used) {
+            await shareManager.share(text);
+        }
     }
 
     // Toggle sound on/off

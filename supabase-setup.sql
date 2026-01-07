@@ -1,8 +1,9 @@
 -- Supabase SQL Setup for Tap That Mosquito
 -- Run this in the Supabase SQL Editor
+-- Run each section separately if you encounter errors
 
 -- ============================================
--- LEADERBOARD (Weekly Reset)
+-- LEADERBOARD TABLE (Weekly Reset)
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS leaderboard (
@@ -19,19 +20,10 @@ CREATE TABLE IF NOT EXISTS leaderboard (
 
 -- Index for fast score sorting within current week
 CREATE INDEX IF NOT EXISTS idx_leaderboard_week_score ON leaderboard(week_start, score DESC);
-
--- View for current week's leaderboard (top 50)
-CREATE OR REPLACE VIEW current_week_leaderboard AS
-SELECT 
-    id, wallet_address, username, fid, score, tapped, best_combo, created_at,
-    ROW_NUMBER() OVER (ORDER BY score DESC) as rank
-FROM leaderboard
-WHERE week_start = date_trunc('week', CURRENT_DATE)::DATE
-ORDER BY score DESC
-LIMIT 50;
+CREATE INDEX IF NOT EXISTS idx_leaderboard_wallet ON leaderboard(wallet_address);
 
 -- ============================================
--- NOTIFICATION TOKENS
+-- NOTIFICATION TOKENS TABLE
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS notification_tokens (
@@ -46,7 +38,7 @@ CREATE TABLE IF NOT EXISTS notification_tokens (
 CREATE INDEX IF NOT EXISTS idx_notification_fid ON notification_tokens(fid);
 
 -- ============================================
--- VERSUS CHALLENGES
+-- VERSUS CHALLENGES TABLE
 -- ============================================
 
 CREATE TABLE IF NOT EXISTS challenges (
@@ -69,12 +61,6 @@ CREATE INDEX IF NOT EXISTS idx_challenges_challenger ON challenges(challenger_fi
 CREATE INDEX IF NOT EXISTS idx_challenges_opponent ON challenges(opponent_fid, status);
 CREATE INDEX IF NOT EXISTS idx_challenges_expires ON challenges(expires_at) WHERE status = 'pending';
 
--- Prevent duplicate challenges within 24 hours
-CREATE UNIQUE INDEX IF NOT EXISTS idx_no_duplicate_challenges 
-ON challenges(challenger_fid, opponent_fid) 
-WHERE status IN ('pending', 'accepted') 
-  AND created_at > NOW() - INTERVAL '24 hours';
-
 -- ============================================
 -- ROW LEVEL SECURITY
 -- ============================================
@@ -83,12 +69,21 @@ ALTER TABLE leaderboard ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_tokens ENABLE ROW LEVEL SECURITY;
 ALTER TABLE challenges ENABLE ROW LEVEL SECURITY;
 
+-- Drop existing policies if they exist (for re-running)
+DROP POLICY IF EXISTS "Public read access" ON leaderboard;
+DROP POLICY IF EXISTS "Allow insert" ON leaderboard;
+DROP POLICY IF EXISTS "Service role only" ON notification_tokens;
+DROP POLICY IF EXISTS "Public read challenges" ON challenges;
+DROP POLICY IF EXISTS "Allow create challenges" ON challenges;
+DROP POLICY IF EXISTS "Allow update challenges" ON challenges;
+
 -- Leaderboard: public read, insert allowed
 CREATE POLICY "Public read access" ON leaderboard FOR SELECT USING (true);
 CREATE POLICY "Allow insert" ON leaderboard FOR INSERT WITH CHECK (true);
 
--- Notification tokens: service role only
-CREATE POLICY "Service role only" ON notification_tokens FOR ALL USING (false);
+-- Notification tokens: only accessible via service role (not anon)
+CREATE POLICY "Service role only" ON notification_tokens FOR ALL 
+    USING (auth.role() = 'service_role');
 
 -- Challenges: public read, insert/update allowed
 CREATE POLICY "Public read challenges" ON challenges FOR SELECT USING (true);
@@ -96,18 +91,9 @@ CREATE POLICY "Allow create challenges" ON challenges FOR INSERT WITH CHECK (tru
 CREATE POLICY "Allow update challenges" ON challenges FOR UPDATE USING (true);
 
 -- ============================================
--- HELPER FUNCTIONS
+-- HELPER FUNCTION: Expire old challenges
 -- ============================================
 
--- Function to get week start date
-CREATE OR REPLACE FUNCTION get_week_start()
-RETURNS DATE AS $$
-BEGIN
-    RETURN date_trunc('week', CURRENT_DATE)::DATE;
-END;
-$$ LANGUAGE plpgsql;
-
--- Function to auto-expire old challenges (run periodically)
 CREATE OR REPLACE FUNCTION expire_old_challenges()
 RETURNS void AS $$
 BEGIN
@@ -116,4 +102,4 @@ BEGIN
     WHERE status = 'pending' 
       AND expires_at < NOW();
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -1649,8 +1649,10 @@ class Game {
             return;
         }
 
+        const currentAddress = this.walletAddress?.toLowerCase();
         container.innerHTML = entries.map((entry, index) => {
-            const isCurrentPlayer = entry.address === this.walletAddress ||
+            const entryAddress = entry.address ? entry.address.toLowerCase() : null;
+            const isCurrentPlayer = (currentAddress && entryAddress && entryAddress === currentAddress) ||
                 (entry.timestamp && Date.now() - entry.timestamp < 1000);
 
             let rankClass = '';
@@ -1664,8 +1666,9 @@ class Game {
 
             // Fallback: If this is the current user and we know their username, use it!
             if ((!nameDisplay || nameDisplay === 'Connected') &&
-                this.walletAddress &&
-                entry.address === this.walletAddress &&
+                currentAddress &&
+                entryAddress &&
+                entryAddress === currentAddress &&
                 this.username) {
                 nameDisplay = this.username;
             }

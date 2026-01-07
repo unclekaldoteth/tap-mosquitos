@@ -64,11 +64,17 @@ export default async function handler(req, res) {
                 return res.status(400).json({ error: 'Missing required fields' });
             }
 
+            if (typeof walletAddress !== 'string') {
+                return res.status(400).json({ error: 'Invalid wallet address' });
+            }
+
+            const normalizedAddress = walletAddress.toLowerCase();
+
             // Check if user already has an entry this week
             const { data: existing } = await supabase
                 .from('leaderboard')
                 .select('*')
-                .eq('wallet_address', walletAddress)
+                .eq('wallet_address', normalizedAddress)
                 .eq('week_start', weekStart)
                 .single();
 
@@ -98,7 +104,7 @@ export default async function handler(req, res) {
                 const { data: inserted, error } = await supabase
                     .from('leaderboard')
                     .insert({
-                        wallet_address: walletAddress,
+                        wallet_address: normalizedAddress,
                         username: username || null,
                         score: score,
                         tapped: tapped || 0,

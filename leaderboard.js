@@ -33,6 +33,11 @@ class LeaderboardManager {
         }
     }
 
+    // Normalize wallet address for consistent matching/storage
+    normalizeAddress(address) {
+        return typeof address === 'string' ? address.toLowerCase() : null;
+    }
+
     // Fetch global leaderboard from API
     async fetchGlobal() {
         try {
@@ -41,7 +46,7 @@ class LeaderboardManager {
                 const data = await response.json();
                 this.entries = (data.entries || []).map(entry => ({
                     score: entry.score,
-                    address: entry.wallet_address,
+                    address: this.normalizeAddress(entry.wallet_address) || entry.wallet_address,
                     username: entry.username,
                     displayAddress: entry.username || this.formatAddress(entry.wallet_address),
                     tapped: entry.tapped,
@@ -63,9 +68,10 @@ class LeaderboardManager {
 
     // Add a new score entry
     async addScore(score, address = null, username = null, stats = {}) {
+        const normalizedAddress = address ? this.normalizeAddress(address) : null;
         const entry = {
             score,
-            address: address || 'Anonymous',
+            address: normalizedAddress || address || 'Anonymous',
             username: username || null,
             displayAddress: username || this.formatAddress(address),
             tapped: stats.tapped || 0,
@@ -80,7 +86,7 @@ class LeaderboardManager {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    walletAddress: address,
+                    walletAddress: normalizedAddress,
                     username: username,
                     score: score,
                     tapped: stats.tapped || 0,
@@ -123,10 +129,12 @@ class LeaderboardManager {
     // Get player's best score
     getBestScore(address) {
         if (!address) return null;
+        const normalizedAddress = this.normalizeAddress(address);
         const all = this.getAll();
-        const playerEntries = all.filter(e =>
-            e.address && e.address.toLowerCase() === address.toLowerCase()
-        );
+        const playerEntries = all.filter(e => {
+            if (!e.address || !normalizedAddress) return false;
+            return this.normalizeAddress(e.address) === normalizedAddress;
+        });
         return playerEntries.length > 0 ? playerEntries[0] : null;
     }
 
@@ -149,8 +157,9 @@ class LeaderboardManager {
         if (!address || !username) return;
 
         let updated = false;
+        const normalizedAddress = this.normalizeAddress(address);
         this.localEntries.forEach(entry => {
-            if (entry.address && entry.address.toLowerCase() === address.toLowerCase()) {
+            if (entry.address && this.normalizeAddress(entry.address) === normalizedAddress) {
                 if (entry.username !== username) {
                     entry.username = username;
                     entry.displayAddress = username;

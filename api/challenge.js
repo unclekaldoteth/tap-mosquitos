@@ -387,11 +387,11 @@ async function sendResultNotification(challenge) {
     if (winnerFid) {
         const winnerTokens = await fetchNotificationTokens(winnerFid);
         const winnerScore = winnerFid === challenge.challenger_fid ? challengerScore : opponentScore;
-        const loserScore = winnerFid === challenge.challenger_fid ? opponentScore : challengerScore;
+        const loserScoreForWinner = winnerFid === challenge.challenger_fid ? opponentScore : challengerScore;
         await sendNotification(winnerTokens, {
             notificationId: `win-${challenge.id}-${winnerFid}`,
             title: '🏆 Victory!',
-            body: `You won! ${winnerScore} - ${loserScore}`,
+            body: `You won! ${winnerScore} - ${loserScoreForWinner}`,
             targetUrl: `${APP_URL}?challenge=${challenge.id}`
         });
 

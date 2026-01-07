@@ -131,6 +131,8 @@
                     <div class="start-buttons">
                         <button id="start-btn" class="pixel-btn">SOLO GAME</button>
                         <button id="versus-btn" class="pixel-btn versus-btn">⚔️ VERSUS</button>
+                        <button id="leaderboard-btn" class="pixel-btn share-btn"
+                            style="background: #202040; border-color: #404060;">🏆 LEADERBOARD</button>
                     </div>
 
                     <!-- Sponsor Wall -->
@@ -145,6 +147,19 @@
                         <button id="become-sponsor-btn" class="sponsor-btn">💎 Become a Sponsor</button>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <!-- Leaderboard Modal -->
+        <div id="leaderboard-modal" class="overlay hidden">
+            <div class="overlay-content">
+                <h2 class="game-title" style="font-size: 20px; margin-bottom: 20px;">🏆 TOP PLAYERS</h2>
+                <div class="leaderboard-section">
+                    <div id="home-leaderboard-list" class="leaderboard-list">
+                        <div class="leaderboard-entry">Loading...</div>
+                    </div>
+                </div>
+                <button id="close-leaderboard-btn" class="pixel-btn small">← CLOSE</button>
             </div>
         </div>
 

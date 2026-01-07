@@ -43,6 +43,12 @@ class Game {
         this.achievementIcon = document.getElementById('achievement-icon');
         this.menuBtn = document.getElementById('menu-btn');
 
+        // Leaderboard Modal Elements
+        this.leaderboardBtn = document.getElementById('leaderboard-btn');
+        this.leaderboardModal = document.getElementById('leaderboard-modal');
+        this.closeLeaderboardBtn = document.getElementById('close-leaderboard-btn');
+        this.homeLeaderboardList = document.getElementById('home-leaderboard-list');
+
         // Versus mode elements
         this.versusBtn = document.getElementById('versus-btn');
         this.versusScreen = document.getElementById('versus-screen');
@@ -157,6 +163,19 @@ class Game {
         this.mintBtn.addEventListener('click', () => this.mintNFT());
         this.soundToggle.addEventListener('click', () => this.toggleSound());
         this.menuBtn.addEventListener('click', () => this.goToMainMenu());
+
+        // Leaderboard modal listeners
+        if (this.leaderboardBtn) {
+            this.leaderboardBtn.addEventListener('click', () => {
+                this.leaderboardModal.classList.remove('hidden');
+                this.renderLeaderboard(); // Refresh when opening
+            });
+        }
+        if (this.closeLeaderboardBtn) {
+            this.closeLeaderboardBtn.addEventListener('click', () => {
+                this.leaderboardModal.classList.add('hidden');
+            });
+        }
 
         // Versus mode event listeners
         this.versusBtn.addEventListener('click', () => this.showVersusScreen());
@@ -1474,12 +1493,22 @@ class Game {
     renderLeaderboard() {
         const entries = leaderboard.getAll();
 
+        // Render to Game Over leaderboard
+        this.renderLeaderboardList(this.leaderboardList, entries);
+
+        // Render to Homepage leaderboard
+        this.renderLeaderboardList(this.homeLeaderboardList, entries);
+    }
+
+    renderLeaderboardList(container, entries) {
+        if (!container) return;
+
         if (entries.length === 0) {
-            this.leaderboardList.innerHTML = '<div class="leaderboard-entry">No scores yet!</div>';
+            container.innerHTML = '<div class="leaderboard-entry">No scores yet!</div>';
             return;
         }
 
-        this.leaderboardList.innerHTML = entries.map((entry, index) => {
+        container.innerHTML = entries.map((entry, index) => {
             const isCurrentPlayer = entry.address === this.walletAddress ||
                 (entry.timestamp && Date.now() - entry.timestamp < 1000);
 
@@ -1520,13 +1549,15 @@ class Game {
         }).join('');
 
         // Add click handlers for viewing profiles
-        this.leaderboardEl.querySelectorAll('.leaderboard-name.clickable').forEach(el => {
+        container.querySelectorAll('.leaderboard-name.clickable').forEach(el => {
             el.addEventListener('click', (e) => {
                 const fid = parseInt(e.target.dataset.fid);
                 if (fid) this.viewProfile(fid);
             });
         });
     }
+
+
 
     // Share score to Farcaster with contextual options
     async shareScore() {

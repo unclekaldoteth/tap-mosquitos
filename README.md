@@ -109,9 +109,9 @@ tap-that-mosquito/
 
 ---
 
-## Base Sepolia Deployment
+## Base Mainnet Deployment
 
-### Smart Contracts on Base Sepolia Testnet
+### Smart Contracts on Base Mainnet
 
 | Contract Name | Description |
 |--------------|-------------|
@@ -119,7 +119,7 @@ tap-that-mosquito/
 | **VersusNFT** | 1v1 challenge and victory tracking |
 
 ### Deployment Details
-- **Network:** Base Sepolia
+- **Network:** Base Mainnet
 - **Solidity Version:** 0.8.20
 - **OpenZeppelin:** 5.4.0
 - **Framework:** Hardhat
@@ -158,7 +158,7 @@ tap-that-mosquito/
 ### Browser Wallet
 - MetaMask and other injected wallets
 - EIP-1193 provider detection
-- Automatic network switching to Base Sepolia
+- Automatic network switching to Base Mainnet
 
 ### Farcaster SDK
 - Context detection for Mini App environment
@@ -172,7 +172,7 @@ tap-that-mosquito/
 ### Prerequisites
 - Node.js 18+
 - MetaMask or compatible wallet
-- Base Sepolia testnet ETH
+- Base Mainnet ETH for gas
 
 ### Development
 ```bash
@@ -214,7 +214,7 @@ npx hardhat run scripts/deploy.js --network baseMainnet
 
 ### Integration
 - Farcaster Mini App SDK
-- Base Sepolia Testnet
+- Base Mainnet
 
 ---
 

@@ -552,6 +552,62 @@ class Game {
         }
     }
 
+    // Sign In with Farcaster - cryptographic authentication
+    async signInWithFarcaster() {
+        try {
+            const result = await sdk.actions.signIn({
+                nonce: this.generateNonce(),
+                siweUri: 'https://tap-mosquito.vercel.app',
+                domain: 'tap-mosquito.vercel.app'
+            });
+
+            if (result) {
+                console.log('Signed in with Farcaster:', result.fid);
+                // Store authenticated FID
+                this.authenticatedFid = result.fid;
+                this.authSignature = result.signature;
+                this.authMessage = result.message;
+                return result;
+            }
+            return null;
+        } catch (e) {
+            console.log('signIn not available:', e.message);
+            return null;
+        }
+    }
+
+    // Add/Save the mini app to user's collection
+    async addFrame() {
+        try {
+            const result = await sdk.actions.addFrame();
+
+            if (result) {
+                console.log('Mini app saved! Token:', result.token?.slice(0, 20) + '...');
+
+                // Send token to backend for notifications
+                if (result.token) {
+                    try {
+                        await fetch('/api/notification-tokens', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                token: result.token,
+                                url: result.url || 'https://tap-mosquito.vercel.app'
+                            })
+                        });
+                    } catch (e) {
+                        console.log('Failed to save notification token:', e.message);
+                    }
+                }
+                return true;
+            }
+            return false;
+        } catch (e) {
+            console.log('addFrame not available:', e.message);
+            return false;
+        }
+    }
+
     // ============================================
     // END SDK ACTIONS
     // ============================================

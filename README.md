@@ -192,8 +192,8 @@ npm run build
 # Compile contracts
 npx hardhat compile
 
-# Deploy to Base Sepolia
-npx hardhat run scripts/deploy.js --network baseSepolia
+# Deploy to Base Mainnet
+npx hardhat run scripts/deploy.js --network baseMainnet
 ```
 
 ---

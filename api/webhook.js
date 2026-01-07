@@ -12,7 +12,26 @@ const supabase = supabaseUrl && supabaseServiceKey
     ? createClient(supabaseUrl, supabaseServiceKey)
     : null;
 
+// Custom verifier that uses NEYNAR_API_KEY env var
+async function customVerifyAppKey(appKey) {
+    const apiKey = process.env.NEYNAR_API_KEY;
+    if (!apiKey) {
+        console.error('NEYNAR_API_KEY not set, skipping verification');
+        return true; // Skip verification if no key (for development)
+    }
+    return verifyAppKeyWithNeynar(appKey);
+}
+
 export default async function handler(req, res) {
+    // CORS headers for all requests
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+
     // Only accept POST requests
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
@@ -21,13 +40,17 @@ export default async function handler(req, res) {
     try {
         const requestJson = req.body;
 
+        // Log incoming request for debugging
+        console.log('Webhook received:', JSON.stringify(requestJson).slice(0, 200));
+
         // Parse and verify the webhook event
         let data;
         try {
-            data = await parseWebhookEvent(requestJson, verifyAppKeyWithNeynar);
+            data = await parseWebhookEvent(requestJson, customVerifyAppKey);
         } catch (e) {
-            console.error('Webhook verification failed:', e);
-            return res.status(401).json({ error: 'Invalid signature' });
+            console.error('Webhook verification failed:', e.message);
+            // Return 200 anyway to prevent retry loops
+            return res.status(200).json({ success: false, error: e.message });
         }
 
         // Extract webhook data
@@ -74,7 +97,8 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true });
     } catch (error) {
         console.error('Webhook error:', error);
-        return res.status(500).json({ error: 'Internal server error' });
+        // Return 200 to prevent retry loops
+        return res.status(200).json({ success: false, error: error.message });
     }
 }
 

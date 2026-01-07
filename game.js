@@ -130,6 +130,15 @@ class Game {
     }
 
     async init() {
+        // DEBUG: Log init start to verify debug endpoint works (remove after debugging)
+        try {
+            await fetch('/api/debug', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ message: 'init() started', context: { time: new Date().toISOString() } })
+            });
+        } catch (e) { /* ignore */ }
+
         // Signal to Base Mini App that the app is ready to display FIRST
         try {
             sdk.actions.ready();

@@ -310,12 +310,28 @@ class Game {
         try {
             // Check if we're in a Mini App context
             const isInMiniApp = await sdk.isInMiniApp();
+            console.log('isInMiniApp:', isInMiniApp);
+
             if (isInMiniApp) {
                 // Get context which includes user info
                 const context = await sdk.context;
-                if (context?.user?.connectedAddress) {
-                    const username = context.user.username || context.user.displayName || null;
-                    this.setWalletConnected(context.user.connectedAddress, username);
+                console.log('SDK context:', JSON.stringify(context?.user || {}, null, 2));
+
+                if (context?.user) {
+                    const user = context.user;
+                    const address = user.connectedAddress || user.wallet?.address || null;
+
+                    // Try multiple sources for username
+                    const username = user.username
+                        || user.displayName
+                        || user.name
+                        || (user.fid ? `fid:${user.fid}` : null);
+
+                    console.log('Auto-connect: address=', address, 'username=', username);
+
+                    if (address) {
+                        this.setWalletConnected(address, username);
+                    }
                 }
             }
         } catch (error) {

@@ -264,6 +264,10 @@ body {
     display: none;
 }
 
+#challenge-received-modal {
+    z-index: 200;
+}
+
 .overlay-content {
     text-align: center;
     padding: 24px;
@@ -1082,6 +1086,21 @@ body {
 .action-btn:active {
     transform: translateY(1px);
     box-shadow: 0 2px 10px rgba(255, 71, 119, 0.3);
+}
+
+.notification-btn {
+    width: 100%;
+    margin-top: 10px;
+    background: var(--primary);
+    color: var(--bg-dark);
+    box-shadow:
+        0 4px 0 var(--primary-dim),
+        0 8px 16px rgba(0, 255, 136, 0.3);
+}
+
+.notification-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
 }
 
 .divider {

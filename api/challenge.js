@@ -140,9 +140,13 @@ async function createChallenge(req, res) {
     if (error) throw error;
 
     // Send notification to opponent
-    await sendChallengeNotification(resolvedOpponentFid, normalizedChallengerUsername, challenge.id);
+    const notificationSent = await sendChallengeNotification(
+        resolvedOpponentFid,
+        normalizedChallengerUsername,
+        challenge.id
+    );
 
-    return res.status(200).json({ success: true, challenge });
+    return res.status(200).json({ success: true, challenge, notificationSent });
 }
 
 // Accept a challenge
@@ -407,7 +411,7 @@ async function fetchNotificationTokens(fid) {
 }
 
 async function sendNotification(tokens, payload) {
-    if (!tokens || tokens.length === 0) return;
+    if (!tokens || tokens.length === 0) return false;
 
     const grouped = new Map();
     for (const item of tokens) {
@@ -418,26 +422,38 @@ async function sendNotification(tokens, payload) {
         grouped.get(item.url).push(item.token);
     }
 
+    let delivered = false;
     for (const [url, tokenList] of grouped.entries()) {
         if (!tokenList.length) continue;
         try {
-            await fetch(url, {
+            const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...payload, tokens: tokenList })
+                body: JSON.stringify({
+                    ...payload,
+                    token: tokenList[0],
+                    tokens: tokenList
+                })
             });
+            if (response.ok) {
+                delivered = true;
+            } else {
+                const detail = await response.text();
+                console.error('Notification request failed:', response.status, detail);
+            }
         } catch (e) {
             console.error('Failed to send notification:', e);
         }
     }
+    return delivered;
 }
 
 // Helper: Send challenge notification
 async function sendChallengeNotification(opponentFid, challengerUsername, challengeId) {
     const tokens = await fetchNotificationTokens(opponentFid);
-    if (!tokens.length) return;
+    if (!tokens.length) return false;
 
-    await sendNotification(tokens, {
+    return await sendNotification(tokens, {
         notificationId: `challenge-${challengeId}-${opponentFid}`,
         title: '🎮 Challenge Received!',
         body: `${formatUsername(challengerUsername)} challenged you to Tap That Mosquito!`,

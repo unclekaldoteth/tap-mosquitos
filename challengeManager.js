@@ -69,7 +69,10 @@ class ChallengeManager {
             throw new Error(data.error || 'Failed to create challenge');
         }
 
-        return data.challenge;
+        return {
+            challenge: data.challenge,
+            notificationSent: data.notificationSent
+        };
     }
 
     // Accept a pending challenge

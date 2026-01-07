@@ -75,6 +75,7 @@ class Game {
         this.challengerNameEl = document.getElementById('challenger-name');
         this.acceptChallengeBtn = document.getElementById('accept-challenge-btn');
         this.declineChallengeBtn = document.getElementById('decline-challenge-btn');
+        this.enableNotificationsBtn = document.getElementById('enable-notifications-btn');
 
         // Wallet status indicator (on start screen)
         this.walletStatus = document.getElementById('wallet-status');
@@ -204,6 +205,9 @@ class Game {
             this.challengeAnotherBtn.addEventListener('click', () => this.showVersusScreenFromResult());
         }
         this.versusMenuBtn.addEventListener('click', () => this.backToMainMenu());
+        if (this.enableNotificationsBtn) {
+            this.enableNotificationsBtn.addEventListener('click', () => this.enableNotifications());
+        }
         if (this.acceptChallengeBtn) {
             this.acceptChallengeBtn.addEventListener('click', () => this.acceptActiveChallenge());
         }
@@ -672,6 +676,29 @@ class Game {
         this.challengeStatus.style.color = isError ? '#ff6b6b' : '';
     }
 
+    async enableNotifications() {
+        if (!this.enableNotificationsBtn) return;
+        this.enableNotificationsBtn.disabled = true;
+        const originalText = this.enableNotificationsBtn.textContent;
+        this.enableNotificationsBtn.textContent = '⏳ ENABLING...';
+        try {
+            const saved = await this.addFrame();
+            if (saved) {
+                this.enableNotificationsBtn.textContent = '✅ NOTIFICATIONS ENABLED';
+                this.setChallengeStatus('Notifications enabled. You can receive challenge alerts.', false);
+            } else {
+                this.enableNotificationsBtn.textContent = originalText;
+                this.setChallengeStatus('Notification opt-in skipped.', true);
+            }
+        } catch (error) {
+            console.error('Enable notifications failed:', error);
+            this.enableNotificationsBtn.textContent = originalText;
+            this.setChallengeStatus('Failed to enable notifications.', true);
+        } finally {
+            this.enableNotificationsBtn.disabled = false;
+        }
+    }
+
     getChallengeDisplay(challenge) {
         const raw = typeof challenge?.challenger_username === 'string'
             ? challenge.challenger_username.trim()
@@ -999,10 +1026,12 @@ class Game {
             const result = await sdk.actions.addFrame();
 
             if (result) {
-                console.log('Mini app saved! Token:', result.token?.slice(0, 20) + '...');
+                const token = result.token || result.notificationDetails?.token || null;
+                const url = result.url || result.notificationDetails?.url || null;
+                console.log('Mini app saved! Token:', token ? token.slice(0, 20) + '...' : 'none');
 
                 // Send token to backend for notifications
-                if (result.token) {
+                if (token) {
                     try {
                         let fid = this.fid || this.authenticatedFid;
                         if (!fid) {
@@ -1026,8 +1055,8 @@ class Game {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
                                 body: JSON.stringify({
-                                    token: result.token,
-                                    url: result.url || 'https://tap-mosquito.vercel.app',
+                                    token,
+                                    url: url || 'https://tap-mosquito.vercel.app',
                                     fid
                                 })
                             });
@@ -2141,7 +2170,7 @@ Can you beat my score?`;
             }
 
             this.syncChallengeUser();
-            const challenge = await challengeManager.createChallenge({
+            const { challenge, notificationSent } = await challengeManager.createChallenge({
                 opponentUsername,
                 opponentFid
             });
@@ -2160,7 +2189,10 @@ Can you beat my score?`;
 
             this.startChallengePolling();
             const statusLabel = opponentUsername ? `@${opponentUsername}` : `FID ${opponentFid}`;
-            this.setChallengeStatus(`Challenge sent to ${statusLabel}`, false);
+            const statusSuffix = notificationSent === false
+                ? '. Notifications off (ask them to enable).'
+                : '';
+            this.setChallengeStatus(`Challenge sent to ${statusLabel}${statusSuffix}`, false);
 
             // Prompt to share challenge issued
             const opponentName = this.getOpponentLabel();

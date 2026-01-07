@@ -317,6 +317,18 @@ class Game {
                 const context = await sdk.context;
                 console.log('SDK context:', JSON.stringify(context?.user || {}, null, 2));
 
+                // Send to backend for Vercel logs (DEBUG - remove after fixing)
+                try {
+                    await fetch('/api/debug', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            message: 'tryAutoConnect SDK context',
+                            context: context?.user || {}
+                        })
+                    });
+                } catch (e) { /* ignore */ }
+
                 if (context?.user) {
                     const user = context.user;
                     const address = user.connectedAddress || user.wallet?.address || null;

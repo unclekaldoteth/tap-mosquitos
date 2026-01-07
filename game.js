@@ -1265,7 +1265,7 @@ class Game {
         this.comboIndicator.classList.add('hidden');
     }
 
-    endGame() {
+    async endGame() {
         this.isRunning = false;
 
         // Clear timers
@@ -1293,11 +1293,16 @@ class Game {
             this.saveHighscore(this.score);
         }
 
-        // Add to leaderboard
-        const rank = leaderboard.addScore(this.score, this.walletAddress, this.username, {
-            tapped: this.tappedCount,
-            bestCombo: this.bestCombo,
-        });
+        // Add to leaderboard (async, with fallback)
+        let rank = -1;
+        try {
+            rank = await leaderboard.addScore(this.score, this.walletAddress, this.username, {
+                tapped: this.tappedCount,
+                bestCombo: this.bestCombo,
+            });
+        } catch (error) {
+            console.error('Failed to save score to leaderboard:', error);
+        }
 
         // Get achievement tier
         const achievement = leaderboard.getAchievementTier(this.score);

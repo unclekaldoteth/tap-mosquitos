@@ -4,6 +4,7 @@
 
 // Base Mini App SDK
 import { sdk } from '@farcaster/miniapp-sdk';
+import { ethers } from 'ethers';
 import { soundManager } from './sounds.js';
 import { leaderboard } from './leaderboard.js';
 import { nftMinter } from './nftMinter.js';
@@ -54,12 +55,13 @@ class Game {
         this.versusScreen = document.getElementById('versus-screen');
         this.versusWaiting = document.getElementById('versus-waiting');
         this.versusResultScreen = document.getElementById('versus-result-screen');
-        this.opponentAddressInput = document.getElementById('opponent-address');
+        this.opponentInput = document.getElementById('opponent-username');
         this.createChallengeBtn = document.getElementById('create-challenge-btn');
         this.backToMenuBtn = document.getElementById('back-to-menu-btn');
         this.cancelChallengeBtn = document.getElementById('cancel-challenge-btn');
         this.mintVictoryBtn = document.getElementById('mint-victory-btn');
         this.rematchBtn = document.getElementById('rematch-btn');
+        this.challengeAnotherBtn = document.getElementById('challenge-another-btn');
         this.versusMenuBtn = document.getElementById('versus-menu-btn');
         this.versusResultTitle = document.getElementById('versus-result-title');
         this.yourVersusScore = document.getElementById('your-versus-score');
@@ -106,6 +108,7 @@ class Game {
         this.currentChallengeId = null;
         this.currentBattleId = null;
         this.opponentAddress = null;
+        this.opponentUsername = null;
         this.opponentScore = 0; // Simulated for demo
         this.isWinner = false;
         this.winStreak = 0;
@@ -184,6 +187,9 @@ class Game {
         this.cancelChallengeBtn.addEventListener('click', () => this.cancelChallenge());
         this.mintVictoryBtn.addEventListener('click', () => this.mintVictoryNFT());
         this.rematchBtn.addEventListener('click', () => this.startVersusRematch());
+        if (this.challengeAnotherBtn) {
+            this.challengeAnotherBtn.addEventListener('click', () => this.showVersusScreenFromResult());
+        }
         this.versusMenuBtn.addEventListener('click', () => this.backToMainMenu());
 
         // Wallet status click handler (on start screen)
@@ -296,6 +302,13 @@ class Game {
             return;
         }
 
+        const sponsorReady = await this.initSponsorManager();
+        if (!sponsorReady) {
+            this.sponsorStatus.textContent = this.sponsorInitError || 'Sponsor system unavailable';
+            this.sponsorStatus.style.color = '#ff6b6b';
+            return;
+        }
+
         this.sponsorStatus.textContent = 'Processing...';
         this.sponsorStatus.style.color = '#ffd700';
 
@@ -306,7 +319,7 @@ class Game {
             await this.loadSponsors();
             setTimeout(() => this.hideSponsorModal(), 2000);
         } catch (error) {
-            this.sponsorStatus.textContent = error.message;
+            this.sponsorStatus.textContent = this.getReadableError(error, 'Sponsor transaction failed.');
             this.sponsorStatus.style.color = '#ff6b6b';
         }
     }
@@ -369,7 +382,7 @@ class Game {
 
                     console.log('Auto-connect: address=', address, 'username=', username);
 
-                    if (address) {
+                    if (this.isValidAddress(address)) {
                         this.setWalletConnected(address, username);
                     }
                 }
@@ -405,7 +418,7 @@ class Game {
                     if (token) {
                         // Get user context for address and username
                         const context = await sdk.context;
-                        const address = context?.user?.connectedAddress || 'Connected';
+                        let address = context?.user?.connectedAddress || context?.user?.wallet?.address || null;
 
                         // Preserve existing username if context doesn't have one
                         const contextUsername = context?.user?.username || context?.user?.displayName || null;
@@ -414,8 +427,22 @@ class Game {
                         // Store the auth token for future authenticated requests
                         this.authToken = token;
 
-                        this.setWalletConnected(address, username);
-                        connected = true;
+                        if (!this.isValidAddress(address)) {
+                            try {
+                                const provider = await sdk.wallet.getEthereumProvider();
+                                if (provider?.request) {
+                                    const accounts = await provider.request({ method: 'eth_requestAccounts' });
+                                    address = accounts?.[0] || null;
+                                }
+                            } catch (providerError) {
+                                console.log('SDK wallet provider unavailable:', providerError.message);
+                            }
+                        }
+
+                        if (this.isValidAddress(address)) {
+                            this.setWalletConnected(address, username);
+                            connected = true;
+                        }
                     }
                 }
             } catch (sdkError) {
@@ -491,6 +518,17 @@ class Game {
         // Show game content (buttons, sponsor wall) after wallet connected
         this.gameContent.classList.remove('hidden');
 
+        // Initialize sponsor manager after wallet connection
+        this.initSponsorManager()
+            .then((initialized) => {
+                if (initialized) {
+                    this.loadSponsors();
+                }
+            })
+            .catch((error) => {
+                console.log('Sponsor manager init failed:', error.message);
+            });
+
         // Retroactively update usernames in leaderboard for this user
         if (username) {
             leaderboard.updateUsername(address, username);
@@ -536,6 +574,39 @@ class Game {
         return `${address.slice(0, 4)}..${address.slice(-4)}`;
     }
 
+    getOpponentLabel() {
+        if (this.opponentUsername) return `@${this.opponentUsername}`;
+        if (this.opponentAddress) return this.formatAddress(this.opponentAddress);
+        return 'opponent';
+    }
+
+    parseOpponentInput(input) {
+        const trimmed = input.trim();
+        if (!trimmed) return null;
+
+        const addressPattern = /^0x[a-fA-F0-9]{40}$/;
+        if (addressPattern.test(trimmed)) {
+            return { type: 'address', value: trimmed };
+        }
+
+        const username = trimmed.startsWith('@') ? trimmed.slice(1) : trimmed;
+        if (!username) return null;
+        return { type: 'username', value: username };
+    }
+
+    isValidAddress(address) {
+        return typeof address === 'string' && /^0x[a-fA-F0-9]{40}$/.test(address);
+    }
+
+    getReadableError(error, fallback) {
+        const message = error?.shortMessage || error?.reason || error?.message;
+        if (!message) return fallback;
+        if (message.includes("Cannot read properties of undefined (reading 'error')")) {
+            return 'Wallet provider error. Reconnect your wallet and try again.';
+        }
+        return message;
+    }
+
     generateNonce() {
         return Math.random().toString(36).substring(2, 15) +
             Math.random().toString(36).substring(2, 15);
@@ -544,6 +615,76 @@ class Game {
     showWalletInfo() {
         // Simple alert for now - could be a modal
         alert(`Connected: ${this.walletAddress}`);
+    }
+
+    async initSponsorManager() {
+        if (sponsorManager.isInitialized) return true;
+
+        this.sponsorInitError = null;
+        const prizePoolAddress = import.meta.env.VITE_PRIZE_POOL_ADDRESS;
+        if (!prizePoolAddress) {
+            this.sponsorInitError = 'Missing VITE_PRIZE_POOL_ADDRESS. Restart the dev server after updating .env.';
+            return false;
+        }
+
+        let rawProvider = null;
+        try {
+            rawProvider = await sdk.wallet.getEthereumProvider();
+        } catch (sdkError) {
+            console.log('Sponsor provider not available via SDK:', sdkError.message);
+        }
+
+        if (!rawProvider && typeof window !== 'undefined' && window.ethereum) {
+            rawProvider = window.ethereum;
+        }
+
+        if (!rawProvider) {
+            this.sponsorInitError = 'No wallet provider found. Connect MetaMask or use the mini app wallet.';
+            return false;
+        }
+
+        try {
+            let chainId = null;
+            if (rawProvider.request) {
+                try {
+                    await rawProvider.request({ method: 'eth_requestAccounts' });
+                } catch (requestError) {
+                    this.sponsorInitError = this.getReadableError(requestError, 'Wallet connection rejected.');
+                    return false;
+                }
+
+                try {
+                    const chainHex = await rawProvider.request({ method: 'eth_chainId' });
+                    chainId = chainHex ? parseInt(chainHex, 16) : null;
+                } catch (chainError) {
+                    this.sponsorInitError = this.getReadableError(chainError, 'Unable to detect network.');
+                    return false;
+                }
+            }
+            const provider = new ethers.BrowserProvider(rawProvider);
+            if (!chainId) {
+                try {
+                    const network = await provider.getNetwork();
+                    chainId = Number(network.chainId);
+                } catch (networkError) {
+                    this.sponsorInitError = this.getReadableError(networkError, 'Unable to detect network.');
+                    return false;
+                }
+            }
+            if (chainId && chainId !== 8453) {
+                this.sponsorInitError = 'Wrong network: switch to Base.';
+                return false;
+            }
+            const initialized = await sponsorManager.init(provider);
+            if (!initialized) {
+                this.sponsorInitError = 'Sponsor contract not configured. Check VITE_PRIZE_POOL_ADDRESS.';
+            }
+            return initialized;
+        } catch (error) {
+            console.log('Sponsor manager init failed:', error?.message || error);
+            this.sponsorInitError = this.getReadableError(error, 'Sponsor manager init failed');
+            return false;
+        }
     }
 
     showWalletError(message) {
@@ -1690,7 +1831,9 @@ Can you beat my score?`;
             alert('Please connect your wallet first to use Versus mode!');
             return;
         }
+        this.isVersusMode = false;
         this.startScreen.classList.add('hidden');
+        this.versusResultScreen.classList.add('hidden');
         this.versusScreen.classList.remove('hidden');
     }
 
@@ -1700,16 +1843,25 @@ Can you beat my score?`;
     }
 
     async createChallenge() {
-        const opponentAddress = this.opponentAddressInput.value.trim();
+        const opponentInput = this.opponentInput?.value.trim() || '';
+        const parsedOpponent = this.parseOpponentInput(opponentInput);
 
-        if (!opponentAddress || !opponentAddress.startsWith('0x') || opponentAddress.length !== 42) {
-            alert('Please enter a valid Ethereum address (0x...)');
+        if (!parsedOpponent) {
+            alert('Please enter a valid username (e.g. @vitalik) or Ethereum address (0x...)');
             return;
         }
 
-        if (opponentAddress.toLowerCase() === this.walletAddress?.toLowerCase()) {
-            alert('You cannot challenge yourself!');
-            return;
+        if (parsedOpponent.type === 'address') {
+            if (parsedOpponent.value.toLowerCase() === this.walletAddress?.toLowerCase()) {
+                alert('You cannot challenge yourself!');
+                return;
+            }
+        } else if (parsedOpponent.type === 'username' && this.username) {
+            const normalizedSelf = this.username.replace('@', '').toLowerCase();
+            if (parsedOpponent.value.toLowerCase() === normalizedSelf) {
+                alert('You cannot challenge yourself!');
+                return;
+            }
         }
 
         this.createChallengeBtn.textContent = '⏳ Creating...';
@@ -1719,14 +1871,15 @@ Can you beat my score?`;
             // For demo: simulate challenge creation without actual contract call
             // In production, this would call: await versusManager.createChallenge(opponentAddress);
 
-            this.opponentAddress = opponentAddress;
+            this.opponentAddress = parsedOpponent.type === 'address' ? parsedOpponent.value : null;
+            this.opponentUsername = parsedOpponent.type === 'username' ? parsedOpponent.value : null;
             this.currentChallengeId = Date.now(); // Simulated challenge ID
 
             // Show waiting screen
             this.versusScreen.classList.add('hidden');
             this.versusWaiting.classList.remove('hidden');
             document.getElementById('waiting-text').textContent =
-                `Waiting for ${this.formatAddress(opponentAddress)}...`;
+                `Waiting for ${this.getOpponentLabel()}...`;
 
             // For demo: auto-accept after 2 seconds and start versus game
             setTimeout(() => {
@@ -1734,7 +1887,7 @@ Can you beat my score?`;
             }, 2000);
 
             // Prompt to share challenge issued
-            const opponentName = this.formatAddress(opponentAddress);
+            const opponentName = this.getOpponentLabel();
             if (confirm('Share this challenge on Farcaster to hype up the battle?')) {
                 shareManager.shareChallengeIssued({ opponentName });
             }
@@ -1751,6 +1904,7 @@ Can you beat my score?`;
     cancelChallenge() {
         this.currentChallengeId = null;
         this.opponentAddress = null;
+        this.opponentUsername = null;
         this.versusWaiting.classList.add('hidden');
         this.versusScreen.classList.remove('hidden');
     }
@@ -1770,6 +1924,17 @@ Can you beat my score?`;
         this.startVersusGame();
     }
 
+    showVersusScreenFromResult() {
+        this.isVersusMode = false;
+        this.currentChallengeId = null;
+        this.currentBattleId = null;
+        this.opponentAddress = null;
+        this.opponentUsername = null;
+        this.versusResultScreen.classList.add('hidden');
+        this.startScreen.classList.add('hidden');
+        this.versusScreen.classList.remove('hidden');
+    }
+
     // Go to main menu from game over screen
     goToMainMenu() {
         this.gameOverScreen.classList.add('hidden');
@@ -1782,6 +1947,7 @@ Can you beat my score?`;
         this.currentChallengeId = null;
         this.currentBattleId = null;
         this.opponentAddress = null;
+        this.opponentUsername = null;
         this.versusResultScreen.classList.add('hidden');
         this.startScreen.classList.remove('hidden');
     }
@@ -1896,14 +2062,12 @@ Can you beat my score?`;
             this.mintVictoryBtn.disabled = true;
 
             const victoryInfo = getVictoryTitle(this.winStreak);
-            alert(`Victory NFT Minted!\n\nTitle: ${victoryInfo.title}\nScore: ${this.score} vs ${this.opponentScore}\n\nYou defeated ${this.formatAddress(this.opponentAddress)}!`);
+            alert(`Victory NFT Minted!\n\nTitle: ${victoryInfo.title}\nScore: ${this.score} vs ${this.opponentScore}\n\nYou defeated ${this.getOpponentLabel()}!`);
 
             // Prompt to share victory
             setTimeout(() => {
                 if (confirm('Share your victory on Farcaster?')) {
-                    const opponentName = this.username
-                        ? `@${this.formatAddress(this.opponentAddress)}`
-                        : this.formatAddress(this.opponentAddress);
+                    const opponentName = this.getOpponentLabel();
 
                     shareManager.shareVersusVictory({
                         myScore: this.score,

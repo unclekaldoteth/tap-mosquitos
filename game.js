@@ -620,6 +620,10 @@ class Game {
             return { type: 'fid', value: Number.parseInt(fidMatch[1], 10) };
         }
 
+        if (/^\d+$/.test(trimmed)) {
+            return { type: 'fid', value: Number.parseInt(trimmed, 10) };
+        }
+
         const addressPattern = /^0x[a-fA-F0-9]{40}$/;
         if (addressPattern.test(trimmed)) {
             return { type: 'address', value: trimmed };
@@ -2087,7 +2091,7 @@ Can you beat my score?`;
         const parsedOpponent = this.parseOpponentInput(opponentInput);
 
         if (!parsedOpponent) {
-            alert('Please enter a valid username (e.g. @vitalik), FID (fid:1234), or Ethereum address (0x...)');
+            alert('Please enter a valid username (e.g. @vitalik), FID (fid:1234 or 1234), or Ethereum address (0x...)');
             return;
         }
 

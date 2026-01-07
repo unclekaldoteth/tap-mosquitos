@@ -58,28 +58,53 @@ export default async function handler(req, res) {
 async function createChallenge(req, res) {
     const { challengerFid, challengerUsername, opponentUsername, opponentFid } = req.body;
 
-    if (!challengerFid || (!opponentUsername && opponentFid === undefined && opponentFid === null)) {
+    const hasOpponentFid = opponentFid !== undefined && opponentFid !== null && opponentFid !== '';
+    const hasOpponentUsername = typeof opponentUsername === 'string' && opponentUsername.trim().length > 0;
+
+    if (!challengerFid || (!hasOpponentUsername && !hasOpponentFid)) {
         return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    const normalizedOpponentUsername = normalizeUsername(opponentUsername);
+    let normalizedOpponentUsername = normalizeUsername(opponentUsername);
     const normalizedChallengerUsername = normalizeUsername(challengerUsername);
     let resolvedOpponentFid = null;
+    const rawOpponentUsername = hasOpponentUsername ? opponentUsername.trim() : '';
 
-    if (opponentFid !== undefined && opponentFid !== null && opponentFid !== '') {
+    if (hasOpponentFid) {
         const parsedFid = Number.parseInt(opponentFid, 10);
         if (!Number.isFinite(parsedFid)) {
             return res.status(400).json({ error: 'Invalid opponent FID' });
         }
         resolvedOpponentFid = parsedFid;
-    } else {
+    } else if (hasOpponentUsername) {
+        const fidMatch = rawOpponentUsername.match(/^fid[:\s]*(\d+)$/i);
+        if (fidMatch) {
+            const parsedFid = Number.parseInt(fidMatch[1], 10);
+            if (Number.isFinite(parsedFid)) {
+                resolvedOpponentFid = parsedFid;
+                normalizedOpponentUsername = null;
+            }
+        } else if (/^\d+$/.test(rawOpponentUsername)) {
+            const parsedFid = Number.parseInt(rawOpponentUsername, 10);
+            if (Number.isFinite(parsedFid)) {
+                resolvedOpponentFid = parsedFid;
+                normalizedOpponentUsername = null;
+            }
+        }
+    }
+
+    if (resolvedOpponentFid === null && hasOpponentUsername && !normalizedOpponentUsername && rawOpponentUsername) {
+        normalizedOpponentUsername = rawOpponentUsername;
+    }
+
+    if (!resolvedOpponentFid) {
         // Look up opponent FID from username (using Neynar or stored data)
         const lookup = await lookupFidByUsername(opponentUsername);
         if (!lookup.fid) {
             const status = lookup.reason === 'neynar_missing' ? 503 : 404;
             const message = lookup.reason === 'neynar_missing'
                 ? 'User lookup unavailable. Please try again later.'
-                : 'User not found. Use a Farcaster username (not ENS).';
+                : 'User not found. Use a Farcaster username or FID.';
             return res.status(status).json({ error: message });
         }
         resolvedOpponentFid = lookup.fid;
@@ -297,17 +322,54 @@ async function lookupFidByUsername(username) {
         return { fid: null, reason: 'neynar_missing' };
     }
 
-    try {
-        const response = await fetch(
-            `https://api.neynar.com/v2/farcaster/user/search?q=${cleanUsername}&limit=1`,
-            { headers: { 'api_key': neynarApiKey } }
-        );
-        const data = await response.json();
-        if (data.result?.users?.[0]) {
-            return { fid: data.result.users[0].fid, reason: null };
+    const candidates = [cleanUsername];
+    if (cleanUsername.endsWith('.eth')) {
+        candidates.push(cleanUsername.replace(/\.eth$/i, ''));
+    } else if (!cleanUsername.includes('.')) {
+        candidates.push(`${cleanUsername}.eth`);
+    }
+
+    for (const candidate of candidates) {
+        const directUrls = [
+            `https://api.neynar.com/v2/farcaster/user/by_username?username=${encodeURIComponent(candidate)}`,
+            `https://api.neynar.com/v2/farcaster/user/by-username?username=${encodeURIComponent(candidate)}`
+        ];
+
+        for (const url of directUrls) {
+            try {
+                const response = await fetch(url, { headers: { 'api_key': neynarApiKey } });
+                if (!response.ok) continue;
+                const data = await response.json();
+                const user = data?.user || data?.result?.user;
+                if (user?.fid) {
+                    return { fid: user.fid, reason: null };
+                }
+            } catch (e) {
+                console.error('Neynar direct lookup failed:', e);
+            }
         }
-    } catch (e) {
-        console.error('Neynar lookup failed:', e);
+
+        try {
+            const response = await fetch(
+                `https://api.neynar.com/v2/farcaster/user/search?q=${encodeURIComponent(candidate)}&limit=5`,
+                { headers: { 'api_key': neynarApiKey } }
+            );
+            if (!response.ok) continue;
+            const data = await response.json();
+            const users = data.result?.users || [];
+            const exact = users.find(user =>
+                typeof user?.username === 'string' &&
+                user.username.toLowerCase() === candidate.toLowerCase()
+            );
+            if (exact?.fid) {
+                return { fid: exact.fid, reason: null };
+            }
+            if (users[0]?.fid) {
+                return { fid: users[0].fid, reason: null };
+            }
+        } catch (e) {
+            console.error('Neynar search failed:', e);
+        }
     }
 
     return { fid: null, reason: 'not_found' };

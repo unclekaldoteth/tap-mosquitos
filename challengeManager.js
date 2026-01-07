@@ -28,7 +28,15 @@ class ChallengeManager {
         let opponentFid = null;
 
         if (typeof opponent === 'string') {
-            opponentUsername = opponent;
+            const trimmed = opponent.trim();
+            const fidMatch = trimmed.match(/^fid[:\s]*(\d+)$/i);
+            if (fidMatch) {
+                opponentFid = Number.parseInt(fidMatch[1], 10);
+            } else if (/^\d+$/.test(trimmed)) {
+                opponentFid = Number.parseInt(trimmed, 10);
+            } else {
+                opponentUsername = trimmed;
+            }
         } else if (opponent && typeof opponent === 'object') {
             opponentUsername = opponent.opponentUsername || opponent.username || null;
             opponentFid = opponent.opponentFid ?? opponent.fid ?? null;
@@ -36,6 +44,9 @@ class ChallengeManager {
 
         if (opponentUsername) {
             opponentUsername = opponentUsername.replace(/^@/, '');
+        }
+        if (opponentFid !== null && opponentFid !== undefined && !Number.isFinite(opponentFid)) {
+            opponentFid = null;
         }
         if (!opponentUsername && (opponentFid === null || opponentFid === undefined)) {
             throw new Error('Missing opponent');

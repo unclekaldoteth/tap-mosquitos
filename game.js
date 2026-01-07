@@ -10,6 +10,7 @@ import { leaderboard } from './leaderboard.js';
 import { nftMinter } from './nftMinter.js';
 import { TIER_INFO, Tier } from './contract.js';
 import { versusManager, getVictoryTitle } from './versusContract.js';
+import { challengeManager } from './challengeManager.js';
 import { shareManager } from './shareManager.js';
 import { referralManager } from './referralManager.js';
 import { sponsorManager } from './sponsorManager.js';
@@ -68,6 +69,12 @@ class Game {
         this.opponentVersusScore = document.getElementById('opponent-versus-score');
         this.winnerMintSection = document.getElementById('winner-mint-section');
         this.loserSection = document.getElementById('loser-section');
+        this.challengeStatus = document.getElementById('challenge-status');
+        this.pendingChallengesList = document.getElementById('pending-challenges');
+        this.challengeReceivedModal = document.getElementById('challenge-received-modal');
+        this.challengerNameEl = document.getElementById('challenger-name');
+        this.acceptChallengeBtn = document.getElementById('accept-challenge-btn');
+        this.declineChallengeBtn = document.getElementById('decline-challenge-btn');
 
         // Wallet status indicator (on start screen)
         this.walletStatus = document.getElementById('wallet-status');
@@ -113,6 +120,9 @@ class Game {
         this.opponentScore = 0; // Simulated for demo
         this.isWinner = false;
         this.challengeAcceptTimeout = null;
+        this.challengePollInterval = null;
+        this.pendingChallenges = [];
+        this.activePendingChallenge = null;
         this.winStreak = 0;
         this.totalWins = 0;
         this.previousHighscore = this.highscore;
@@ -193,6 +203,12 @@ class Game {
             this.challengeAnotherBtn.addEventListener('click', () => this.showVersusScreenFromResult());
         }
         this.versusMenuBtn.addEventListener('click', () => this.backToMainMenu());
+        if (this.acceptChallengeBtn) {
+            this.acceptChallengeBtn.addEventListener('click', () => this.acceptActiveChallenge());
+        }
+        if (this.declineChallengeBtn) {
+            this.declineChallengeBtn.addEventListener('click', () => this.declineActiveChallenge());
+        }
 
         // Wallet status click handler (on start screen)
         this.walletStatus.addEventListener('click', () => this.handleWalletClick());
@@ -208,6 +224,8 @@ class Game {
 
         // Try to auto-connect wallet if in Mini App context
         await this.tryAutoConnect();
+        await this.refreshPendingChallenges();
+        await this.handleChallengeLink();
 
         // Sponsor Wall event listeners
         this.becomeSponsorBtn.addEventListener('click', () => this.showSponsorModal());
@@ -542,6 +560,9 @@ class Game {
             leaderboard.updateUsername(address, username);
             this.renderLeaderboard(); // Re-render if looking at it
         }
+
+        this.syncChallengeUser();
+        this.refreshPendingChallenges();
     }
 
     // Get display name (username or formatted address)
@@ -602,6 +623,169 @@ class Game {
         return { type: 'username', value: username };
     }
 
+    syncChallengeUser() {
+        const fid = this.fid || this.authenticatedFid;
+        if (!fid) return;
+        challengeManager.setUser(fid, this.username);
+    }
+
+    async ensureFarcasterContext() {
+        const existingFid = this.fid || this.authenticatedFid;
+        if (existingFid) return existingFid;
+
+        try {
+            const isInMiniApp = await sdk.isInMiniApp();
+            if (!isInMiniApp) return null;
+            const context = await sdk.context;
+            if (context?.user?.fid) {
+                this.fid = context.user.fid;
+                if (!this.username) {
+                    if (context.user.username) {
+                        this.username = context.user.username;
+                    } else if (context.user.displayName) {
+                        this.username = context.user.displayName;
+                    }
+                }
+                this.syncChallengeUser();
+                return this.fid;
+            }
+        } catch (error) {
+            console.log('Failed to load Farcaster context:', error.message);
+        }
+        return null;
+    }
+
+    setChallengeStatus(message, isError = false) {
+        if (!this.challengeStatus) return;
+        this.challengeStatus.textContent = message || '';
+        this.challengeStatus.style.color = isError ? '#ff6b6b' : '';
+    }
+
+    getChallengeDisplay(challenge) {
+        const raw = typeof challenge?.challenger_username === 'string'
+            ? challenge.challenger_username.trim()
+            : '';
+        if (raw) {
+            const cleaned = raw.startsWith('@') ? raw.slice(1) : raw;
+            return { label: `@${cleaned}`, name: cleaned };
+        }
+        if (challenge?.challenger_fid) {
+            const fallback = `fid:${challenge.challenger_fid}`;
+            return { label: fallback, name: fallback };
+        }
+        return { label: 'Unknown', name: 'Unknown' };
+    }
+
+    async refreshPendingChallenges(focusChallengeId = null) {
+        if (!this.pendingChallengesList) return;
+        const fid = await this.ensureFarcasterContext();
+        if (!fid) {
+            this.pendingChallengesList.innerHTML = '<p class="no-challenges">Connect Farcaster to view challenges</p>';
+            return;
+        }
+
+        this.syncChallengeUser();
+
+        const pending = await challengeManager.getPendingChallenges();
+        this.pendingChallenges = pending;
+
+        if (!pending.length) {
+            this.pendingChallengesList.innerHTML = '<p class="no-challenges">No pending challenges</p>';
+            return;
+        }
+
+        this.pendingChallengesList.innerHTML = pending.map(challenge => {
+            const display = this.getChallengeDisplay(challenge);
+            return `
+                <div class="challenge-item" data-challenge-id="${challenge.id}">
+                    <span class="challenge-from">${display.label}</span>
+                    <button class="accept-btn" data-action="open">VIEW</button>
+                </div>
+            `;
+        }).join('');
+
+        const items = this.pendingChallengesList.querySelectorAll('.challenge-item');
+        items.forEach(item => {
+            item.addEventListener('click', () => {
+                const id = item.dataset.challengeId;
+                const target = this.pendingChallenges.find(challenge => String(challenge.id) === String(id));
+                if (target) {
+                    this.openChallengeModal(target);
+                }
+            });
+        });
+
+        if (focusChallengeId) {
+            const target = this.pendingChallenges.find(challenge => String(challenge.id) === String(focusChallengeId));
+            if (target) {
+                this.openChallengeModal(target);
+            }
+        }
+    }
+
+    async handleChallengeLink() {
+        const params = new URLSearchParams(window.location.search);
+        const challengeId = params.get('challenge');
+        if (!challengeId) return;
+        await this.refreshPendingChallenges(challengeId);
+    }
+
+    openChallengeModal(challenge) {
+        if (!challenge || !this.challengeReceivedModal) return;
+        this.activePendingChallenge = challenge;
+        const display = this.getChallengeDisplay(challenge);
+        if (this.challengerNameEl) {
+            this.challengerNameEl.textContent = display.name;
+        }
+        this.challengeReceivedModal.classList.remove('hidden');
+    }
+
+    async acceptActiveChallenge() {
+        const challenge = this.activePendingChallenge;
+        if (!challenge) return;
+
+        try {
+            await this.ensureFarcasterContext();
+            this.syncChallengeUser();
+            await challengeManager.acceptChallenge(challenge.id);
+
+            this.currentChallengeId = challenge.id;
+            const rawOpponent = challenge.challenger_username || '';
+            this.opponentUsername = rawOpponent ? rawOpponent.replace(/^@/, '') : null;
+            this.opponentAddress = null;
+
+            this.challengeReceivedModal.classList.add('hidden');
+            this.activePendingChallenge = null;
+
+            this.versusScreen.classList.add('hidden');
+            this.versusWaiting.classList.add('hidden');
+            this.startScreen.classList.add('hidden');
+
+            await this.refreshPendingChallenges();
+            this.startVersusGame();
+        } catch (error) {
+            console.error('Accept challenge failed:', error);
+            alert('Failed to accept challenge: ' + error.message);
+        }
+    }
+
+    async declineActiveChallenge() {
+        const challenge = this.activePendingChallenge;
+        if (!challenge) return;
+
+        try {
+            await this.ensureFarcasterContext();
+            this.syncChallengeUser();
+            await challengeManager.declineChallenge(challenge.id);
+            this.challengeReceivedModal.classList.add('hidden');
+            this.activePendingChallenge = null;
+            await this.refreshPendingChallenges();
+        } catch (error) {
+            console.error('Decline challenge failed:', error);
+            alert('Failed to decline challenge: ' + error.message);
+        }
+    }
+
     isValidAddress(address) {
         return typeof address === 'string' && /^0x[a-fA-F0-9]{40}$/.test(address);
     }
@@ -610,6 +794,10 @@ class Game {
         if (this.challengeAcceptTimeout) {
             clearTimeout(this.challengeAcceptTimeout);
             this.challengeAcceptTimeout = null;
+        }
+        if (this.challengePollInterval) {
+            clearInterval(this.challengePollInterval);
+            this.challengePollInterval = null;
         }
     }
 
@@ -783,6 +971,7 @@ class Game {
                 this.fid = result.fid;
                 this.authSignature = result.signature;
                 this.authMessage = result.message;
+                this.syncChallengeUser();
                 return result;
             }
             return null;
@@ -1876,6 +2065,7 @@ Can you beat my score?`;
         this.startScreen.classList.add('hidden');
         this.versusResultScreen.classList.add('hidden');
         this.versusScreen.classList.remove('hidden');
+        this.refreshPendingChallenges();
     }
 
     hideVersusScreen() {
@@ -1910,26 +2100,41 @@ Can you beat my score?`;
         this.createChallengeBtn.disabled = true;
 
         try {
-            // For demo: simulate challenge creation without actual contract call
-            // In production, this would call: await versusManager.createChallenge(opponentAddress);
+            this.setChallengeStatus('', false);
+
+            const fid = await this.ensureFarcasterContext();
+            if (!fid) {
+                this.setChallengeStatus('Open in Farcaster to send challenges.', true);
+                return;
+            }
+
+            let opponentUsername = null;
+            if (parsedOpponent.type === 'address') {
+                opponentUsername = await this.fetchFarcasterUsername(parsedOpponent.value);
+                if (!opponentUsername) {
+                    this.setChallengeStatus('No Farcaster username found for that address.', true);
+                    return;
+                }
+            } else {
+                opponentUsername = parsedOpponent.value;
+            }
+
+            this.syncChallengeUser();
+            const challenge = await challengeManager.createChallenge(opponentUsername);
 
             this.opponentAddress = parsedOpponent.type === 'address' ? parsedOpponent.value : null;
-            this.opponentUsername = parsedOpponent.type === 'username' ? parsedOpponent.value : null;
-            this.currentChallengeId = Date.now(); // Simulated challenge ID
+            const rawOpponent = challenge.opponent_username || opponentUsername || '';
+            this.opponentUsername = rawOpponent ? rawOpponent.replace(/^@/, '') : null;
+            this.currentChallengeId = challenge.id;
 
             // Show waiting screen
             this.versusScreen.classList.add('hidden');
             this.versusWaiting.classList.remove('hidden');
             document.getElementById('waiting-text').textContent =
-                `Waiting for ${this.getOpponentLabel()}...`;
+                `Waiting for ${this.getOpponentLabel()} to accept...`;
 
-            // For demo: auto-accept after 2 seconds and start versus game
-            this.clearChallengeTimeout();
-            this.challengeAcceptTimeout = setTimeout(() => {
-                if (!this.currentChallengeId) return;
-                if (this.versusWaiting.classList.contains('hidden')) return;
-                this.startVersusGame();
-            }, 2000);
+            this.startChallengePolling();
+            this.setChallengeStatus(`Challenge sent to @${opponentUsername}`, false);
 
             // Prompt to share challenge issued
             const opponentName = this.getOpponentLabel();
@@ -1939,11 +2144,28 @@ Can you beat my score?`;
 
         } catch (error) {
             console.error('Challenge creation failed:', error);
+            this.setChallengeStatus(error.message || 'Failed to create challenge', true);
             alert('Failed to create challenge: ' + error.message);
         } finally {
             this.createChallengeBtn.textContent = 'SEND CHALLENGE';
             this.createChallengeBtn.disabled = false;
         }
+    }
+
+    startChallengePolling() {
+        if (!this.currentChallengeId) return;
+        this.clearChallengeTimeout();
+        this.challengePollInterval = setInterval(async () => {
+            try {
+                const active = await challengeManager.getActiveChallenge();
+                if (!active || String(active.id) !== String(this.currentChallengeId)) return;
+                if (this.versusWaiting.classList.contains('hidden')) return;
+                this.clearChallengeTimeout();
+                this.startVersusGame();
+            } catch (error) {
+                console.log('Challenge polling failed:', error.message);
+            }
+        }, 3000);
     }
 
     cancelChallenge() {
@@ -1953,6 +2175,7 @@ Can you beat my score?`;
         this.opponentUsername = null;
         this.versusWaiting.classList.add('hidden');
         this.versusScreen.classList.remove('hidden');
+        this.setChallengeStatus('', false);
     }
 
     startVersusGame() {

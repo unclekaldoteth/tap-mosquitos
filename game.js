@@ -1306,81 +1306,81 @@ class Game {
     }
 
     async endGame() {
-        this.isRunning = false;
-
-        // Clear timers
-        clearInterval(this.gameTimer);
-        clearTimeout(this.spawnInterval);
-        clearTimeout(this.comboTimeout);
-
-        // Clear remaining mosquitoes
-        this.mosquitoes.forEach(data => {
-            if (data.element.parentNode) {
-                data.element.remove();
-            }
-        });
-        this.mosquitoes = [];
-
-        // Play game over sound
-        soundManager.playGameOver();
-
-        // Check high score
-        const isNewHighscore = this.score > this.highscore;
-        const previousBest = this.previousHighscore;
-        if (isNewHighscore) {
-            this.previousHighscore = this.score;
-            this.highscore = this.score;
-            this.saveHighscore(this.score);
-        }
-
-        // Add to leaderboard (async, with fallback)
-        let rank = -1;
         try {
-            rank = await leaderboard.addScore(this.score, this.walletAddress, this.username, {
-                tapped: this.tappedCount,
-                bestCombo: this.bestCombo,
+            this.isRunning = false;
+
+            // Clear timers
+            clearInterval(this.gameTimer);
+            clearTimeout(this.spawnInterval);
+            clearTimeout(this.comboTimeout);
+
+            // Clear remaining mosquitoes
+            this.mosquitoes.forEach(data => {
+                if (data.element.parentNode) {
+                    data.element.remove();
+                }
             });
-        } catch (error) {
-            console.error('Failed to save score to leaderboard:', error);
-        }
+            this.mosquitoes = [];
 
-        // Get achievement tier
-        const achievement = leaderboard.getAchievementTier(this.score);
+            // Play game over sound
+            soundManager.playGameOver();
 
-        // Update game over screen
-        this.finalScoreEl.textContent = this.score;
-        this.tappedCountEl.textContent = this.tappedCount;
-        this.escapedCountEl.textContent = this.escapedCount;
-        this.bestComboEl.textContent = `x${this.bestCombo || 1}`;
+            // Check high score
+            const isNewHighscore = this.score > this.highscore;
+            const previousBest = this.previousHighscore;
+            if (isNewHighscore) {
+                this.previousHighscore = this.score;
+                this.highscore = this.score;
+                this.saveHighscore(this.score);
+            }
 
-        // Update achievement badge
-        this.achievementIcon.textContent = this.getAchievementIcon(achievement.tier);
-        this.achievementName.textContent = achievement.name;
-        this.achievementName.style.color = achievement.color;
-        this.achievementBadge.style.borderColor = achievement.color;
+            // Add to leaderboard (async, with fallback)
+            let rank = -1;
+            try {
+                rank = await leaderboard.addScore(this.score, this.walletAddress, this.username, {
+                    tapped: this.tappedCount,
+                    bestCombo: this.bestCombo,
+                });
+            } catch (error) {
+                console.error('Failed to save score to leaderboard:', error);
+            }
 
-        // Update rank display
-        if (rank > 0) {
-            this.rankDisplay.classList.remove('hidden');
-            this.playerRank.textContent = rank;
-        } else {
-            this.rankDisplay.classList.add('hidden');
-        }
+            // Get achievement tier
+            const achievement = leaderboard.getAchievementTier(this.score);
 
-        if (isNewHighscore && this.score > 0) {
-            this.newHighscoreEl.classList.remove('hidden');
-        } else {
-            this.newHighscoreEl.classList.add('hidden');
-        }
+            // Update game over screen
+            this.finalScoreEl.textContent = this.score;
+            this.tappedCountEl.textContent = this.tappedCount;
+            this.escapedCountEl.textContent = this.escapedCount;
+            this.bestComboEl.textContent = `x${this.bestCombo || 1}`;
 
-        // Update leaderboard display
-        this.renderLeaderboard();
+            // Update achievement badge
+            this.achievementIcon.textContent = this.getAchievementIcon(achievement.tier);
+            this.achievementName.textContent = achievement.name;
+            this.achievementName.style.color = achievement.color;
+            this.achievementBadge.style.borderColor = achievement.color;
 
-        // Update mint button visibility
-        this.updateMintButton();
+            // Update rank display
+            if (rank > 0) {
+                this.rankDisplay.classList.remove('hidden');
+                this.playerRank.textContent = rank;
+            } else {
+                this.rankDisplay.classList.add('hidden');
+            }
 
-        // Show game over screen
-        setTimeout(() => {
+            if (isNewHighscore && this.score > 0) {
+                this.newHighscoreEl.classList.remove('hidden');
+            } else {
+                this.newHighscoreEl.classList.add('hidden');
+            }
+
+            // Update leaderboard display
+            this.renderLeaderboard();
+
+            // Update mint button visibility
+            this.updateMintButton();
+
+            // Show game over screen
             this.gameOverScreen.classList.remove('hidden');
 
             // Show Primary Button for Play Again
@@ -1390,7 +1390,7 @@ class Game {
             const isFirstGame = shareManager.isFirstGame();
             shareManager.trackGamePlayed();
 
-            // Prompt contextual shares
+            // Prompt contextual shares (don't await, let it run async)
             this.promptContextualShares({
                 isFirstGame,
                 isNewHighscore,
@@ -1398,7 +1398,24 @@ class Game {
                 rank,
                 achievement
             });
-        }, 500);
+
+        } catch (error) {
+            console.error('endGame error:', error);
+            // Log error to backend for debugging
+            try {
+                await fetch('/api/debug', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: 'endGame ERROR',
+                        context: { error: error.message, stack: error.stack }
+                    })
+                });
+            } catch (e) { /* ignore */ }
+
+            // Force show game over screen even on error
+            this.gameOverScreen.classList.remove('hidden');
+        }
     }
 
     // Prompt contextual share options based on achievements

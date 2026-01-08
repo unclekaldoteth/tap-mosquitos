@@ -113,7 +113,7 @@ export const TIER_INFO = {
 // Contract addresses (deployed)
 export const CONTRACT_ADDRESSES = {
     // Base Mainnet
-    mainnet: "0x5B901B91382670cC3C2eF435385368361fEE9237",
+    mainnet: "0xB7f6D7456837555D7A983f95982cBdb34F102897",
     // Base Sepolia (testnet)
     sepolia: "0x0cb3B5B40491F9c1b5f62Eb1094eF4BAE518a464"
 };

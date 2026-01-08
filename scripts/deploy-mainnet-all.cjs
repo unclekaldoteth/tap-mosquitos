@@ -26,7 +26,13 @@ async function main() {
     const USDC_ADDRESS = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
 
     // Trusted signer (env override or deployer)
-    const TRUSTED_SIGNER = process.env.SIGNER_ADDRESS || deployer.address;
+    let TRUSTED_SIGNER = process.env.SIGNER_ADDRESS || process.env.TRUSTED_SIGNER || null;
+    if (!TRUSTED_SIGNER && process.env.SIGNER_PRIVATE_KEY) {
+        TRUSTED_SIGNER = new hre.ethers.Wallet(process.env.SIGNER_PRIVATE_KEY).address;
+    }
+    if (!TRUSTED_SIGNER) {
+        TRUSTED_SIGNER = deployer.address;
+    }
 
     const deployedContracts = {};
 

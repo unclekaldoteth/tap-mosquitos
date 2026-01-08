@@ -409,7 +409,7 @@ class Game {
                     if (user?.fid) {
                         this.fid = user.fid;
                     }
-                    const address = user.connectedAddress || user.wallet?.address || null;
+                    const address = user.wallet?.address || user.connectedAddress || null;
 
                     // Try multiple sources for username
                     const username = user.username
@@ -458,7 +458,7 @@ class Game {
                         if (context?.user?.fid) {
                             this.fid = context.user.fid;
                         }
-                        let address = context?.user?.connectedAddress || context?.user?.wallet?.address || null;
+                        let address = context?.user?.wallet?.address || context?.user?.connectedAddress || null;
 
                         // Preserve existing username if context doesn't have one
                         const contextUsername = context?.user?.username || context?.user?.displayName || null;

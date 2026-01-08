@@ -33,6 +33,18 @@ class NFTMinter {
         this.isInitialized = false;
     }
 
+    async isMiniApp() {
+        try {
+            return await withTimeout(
+                sdk.isInMiniApp(),
+                2000,
+                'Miniapp check timed out'
+            );
+        } catch {
+            return false;
+        }
+    }
+
     async getContextAddress() {
         try {
             const context = await withTimeout(sdk.context, 4000, 'Context lookup timed out');
@@ -144,6 +156,8 @@ class NFTMinter {
             throw new Error('No Ethereum provider available');
         }
 
+        const isMiniApp = await this.isMiniApp();
+        const contextAddress = isMiniApp ? await this.getContextAddress() : null;
         let account = null;
         let requestError = null;
 
@@ -172,11 +186,13 @@ class NFTMinter {
             }
         }
 
-        if (!account) {
-            const contextAddress = await this.getContextAddress();
-            if (contextAddress) {
-                account = contextAddress;
-            }
+        if (!account && contextAddress) {
+            account = contextAddress;
+        }
+
+        if (contextAddress && account && contextAddress.toLowerCase() !== account.toLowerCase()) {
+            console.log('Using miniapp wallet address for transactions');
+            account = contextAddress;
         }
 
         if (!account) {
@@ -316,6 +332,8 @@ class NFTMinter {
 
         // Try sponsored transaction first (gas-free for user)
         const paymasterUrl = import.meta.env.VITE_PAYMASTER_URL;
+        const isMiniApp = await this.isMiniApp();
+        const requireSponsored = Boolean(paymasterUrl && isMiniApp);
 
         if (paymasterUrl) {
             try {
@@ -336,6 +354,11 @@ class NFTMinter {
                     sponsored: true
                 };
             } catch (sponsoredError) {
+                if (requireSponsored) {
+                    throw (sponsoredError instanceof Error)
+                        ? sponsoredError
+                        : new Error(String(sponsoredError));
+                }
                 console.log('Sponsored transaction failed, falling back to regular:', sponsoredError.message);
             }
         }

@@ -9,9 +9,24 @@ async function main() {
     const balance = await hre.ethers.provider.getBalance(deployer.address);
     console.log("Account balance:", hre.ethers.formatEther(balance), "ETH\n");
 
+    let trustedSigner =
+        process.env.SIGNER_ADDRESS ||
+        process.env.TRUSTED_SIGNER ||
+        null;
+
+    if (!trustedSigner && process.env.SIGNER_PRIVATE_KEY) {
+        trustedSigner = new hre.ethers.Wallet(process.env.SIGNER_PRIVATE_KEY).address;
+    }
+
+    if (!trustedSigner) {
+        trustedSigner = deployer.address;
+    }
+
+    console.log("Trusted signer:", trustedSigner);
+
     // Deploy contract
     const MosquitoSlayerNFT = await hre.ethers.getContractFactory("MosquitoSlayerNFT");
-    const nft = await MosquitoSlayerNFT.deploy();
+    const nft = await MosquitoSlayerNFT.deploy(trustedSigner);
 
     await nft.waitForDeployment();
 
@@ -29,7 +44,7 @@ async function main() {
         try {
             await hre.run("verify:verify", {
                 address: address,
-                constructorArguments: [],
+                constructorArguments: [trustedSigner],
             });
             console.log("✅ Contract verified!");
         } catch (error) {
@@ -39,7 +54,10 @@ async function main() {
 
     console.log("\n🎮 Deployment complete!");
     console.log("Contract address:", address);
-    console.log("Basescan:", `https://sepolia.basescan.org/address/${address}`);
+    const explorerBase = hre.network.name === "baseMainnet"
+        ? "https://basescan.org"
+        : "https://sepolia.basescan.org";
+    console.log("Basescan:", `${explorerBase}/address/${address}`);
 }
 
 main()

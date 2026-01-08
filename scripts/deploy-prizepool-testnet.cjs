@@ -22,8 +22,8 @@ async function main() {
     // If this doesn't exist, you can deploy a mock ERC20 or use any ERC20 token
     const USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"; // Base Sepolia USDC
 
-    // Trusted signer (same as deployer for now)
-    const TRUSTED_SIGNER = deployer.address;
+    // Trusted signer (env override or deployer)
+    const TRUSTED_SIGNER = process.env.SIGNER_ADDRESS || deployer.address;
 
     console.log("Constructor parameters:");
     console.log("  USDC:", USDC_ADDRESS);

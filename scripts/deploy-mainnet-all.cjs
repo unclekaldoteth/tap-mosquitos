@@ -22,11 +22,11 @@ async function main() {
     }
     console.log("");
 
-    // USDC on Base mainnet
+    // USDC CA on Base mainnet
     const USDC_ADDRESS = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
 
-    // Trusted signer (same as deployer)
-    const TRUSTED_SIGNER = deployer.address;
+    // Trusted signer (env override or deployer)
+    const TRUSTED_SIGNER = process.env.SIGNER_ADDRESS || deployer.address;
 
     const deployedContracts = {};
 

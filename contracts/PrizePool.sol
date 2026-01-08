@@ -34,7 +34,7 @@ contract PrizePool is ERC721, Ownable {
     // Distribution percentages (basis points, 10000 = 100%)
     // #1: 30%, #2: 20%, #3: 12%, #4: 8%, #5: 6%, #6: 5%, #7: 4%, #8: 3%, #9: 1%, #10: 1%
     uint256[10] public rewardPercentages = [3000, 2000, 1200, 800, 600, 500, 400, 300, 100, 100];
-    uint256 public constant RESERVE_PERCENTAGE = 1000; // 10%
+    uint256 public constant RESERVE_PERCENTAGE = 0; // 0%
 
     // Sponsor tracking
     struct Sponsor {

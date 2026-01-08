@@ -13,11 +13,11 @@ async function main() {
     const balance = await hre.ethers.provider.getBalance(deployer.address);
     console.log("Account balance:", hre.ethers.formatEther(balance), "ETH\n");
 
-    // USDC on Base mainnet
+    // USDC CA on Base mainnet
     const USDC_ADDRESS = "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913";
 
-    // Trusted signer (same as deployer for now)
-    const TRUSTED_SIGNER = deployer.address;
+    // Trusted signer (env override or deployer)
+    const TRUSTED_SIGNER = process.env.SIGNER_ADDRESS || deployer.address;
 
     console.log("Constructor parameters:");
     console.log("  USDC:", USDC_ADDRESS);

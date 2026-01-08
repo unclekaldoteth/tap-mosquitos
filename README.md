@@ -32,6 +32,8 @@ Tap That Mosquito is a fast-paced tapping game where players score points by eli
 - Victory NFTs for battle winners
 - Champion NFT after 5 wins
 - Win streak tracking
+- Challenge by @username, fid:1234, or 0x address
+- Optional notification opt-in for challenge alerts
 
 ### For Developers
 - Open-source Solidity contracts with OpenZeppelin base
@@ -39,6 +41,7 @@ Tap That Mosquito is a fast-paced tapping game where players score points by eli
 - On-chain SVG generation for NFT metadata
 - Vite development environment
 - Farcaster SDK integration
+- Paymaster-sponsored minting via `wallet_sendCalls` with fallback paths
 
 ---
 
@@ -64,8 +67,8 @@ Share your score → Get rewards in next game:
 
 ### Referral System
 Invite friends via your unique link:
-- Referral code based on wallet address
-- Friend opens `?ref=CODE` link → Both get boosts:
+- Referral code based on Farcaster username (no `@`)
+- Friend opens `/?ref=username` link → Both get boosts:
   - **+10 seconds** bonus time
   - **+50 starting points**
   - **2x multiplier** start
@@ -86,13 +89,20 @@ Invite friends via your unique link:
 tap-that-mosquito/
 ├── contracts/
 │   ├── MosquitoSlayerNFT.sol   # Achievement NFTs
-│   └── VersusNFT.sol           # Versus mode battles
+│   ├── VersusNFT.sol           # Versus mode battles
+│   └── PrizePool.sol           # Sponsor-funded rewards
+├── api/                         # Serverless endpoints (signing, leaderboard, notifications)
 ├── game.js                      # Main game logic
 ├── nftMinter.js                 # NFT minting integration
 ├── versusContract.js            # Versus mode integration
 ├── leaderboard.js               # Score tracking
+├── sponsorManager.js            # Prize pool + sponsor tiers
+├── referralManager.js           # Referral tracking
+├── shareManager.js              # Share-to-boost flow
 ├── index.html                   # Game UI
 ├── style.css                    # Pixel art styling
+├── supabaseClient.js            # Supabase client setup
+├── scripts/                     # Deploy + admin scripts
 └── public/                      # Assets and manifest
 ```
 
@@ -118,12 +128,21 @@ tap-that-mosquito/
 |--------------|-------------|
 | **MosquitoSlayerNFT** | Achievement NFTs with tier-based scoring |
 | **VersusNFT** | 1v1 challenge and victory tracking |
+| **PrizePool** | Sponsor-funded USDC rewards + sponsor NFTs |
 
 ### Deployment Details
 - **Network:** Base Mainnet
 - **Solidity Version:** 0.8.20
 - **OpenZeppelin:** 5.4.0
 - **Framework:** Hardhat
+- **Addresses:** Update `contract.js`, `versusContract.js`, and `VITE_PRIZE_POOL_ADDRESS` after deploys.
+
+### Addresses
+
+| Contract | Base Mainnet | Base Sepolia |
+|---------|--------------|--------------|
+| MosquitoSlayerNFT | `0xB7f6D7456837555D7A983f95982cBdb34F102897` | `0x0cb3B5B40491F9c1b5f62Eb1094eF4BAE518a464` |
+| VersusNFT | `0x0cb3B5B40491F9c1b5f62Eb1094eF4BAE518a464` | `0x0F48Fd7aAC0A3e4FE75029b618b32a66266666B5` |
 
 ---
 
@@ -152,6 +171,17 @@ tap-that-mosquito/
 | `setTrustedSigner(address)` | Admin: update signer address |
 | `mintChampionNFT()` | Mint champion NFT after 5 wins |
 
+### PrizePool
+
+| Function | Description |
+|----------|-------------|
+| `deposit(amount)` | Sponsor the pool in USDC (min $3) |
+| `distribute(week, winners, nonce, signature)` | Signed weekly distribution to top 10 |
+| `hasBoostPerk(address)` | Silver+ boost eligibility |
+| `canMintSponsorNFT(address)` | Gold+ sponsor NFT eligibility |
+| `mintSponsorNFT()` | Mint sponsor NFT (Gold+ only) |
+| `setTrustedSigner(address)` | Admin: update signer address |
+
 ---
 
 ## Wallet Integration
@@ -159,12 +189,13 @@ tap-that-mosquito/
 ### Browser Wallet
 - MetaMask and other injected wallets
 - EIP-1193 provider detection
-- Automatic network switching to Base Mainnet
 
 ### Farcaster SDK
 - Context detection for Mini App environment
 - Ready signal for frame loading
 - Share actions for social integration
+- Quick Auth for seamless Base app wallet access
+- Optional notification opt-in for challenge alerts
 
 ---
 
@@ -194,7 +225,32 @@ npm run build
 npx hardhat compile
 
 # Deploy to Base Mainnet
-npx hardhat run scripts/deploy.js --network baseMainnet
+npx hardhat run scripts/deploy.cjs --network baseMainnet
+
+# Deploy all contracts (NFT + PrizePool + Versus)
+npx hardhat run scripts/deploy-mainnet-all.cjs --network baseMainnet
+
+# Update trusted signer without redeploy
+npx hardhat run scripts/update-nft-signer.cjs --network baseMainnet
+```
+
+### Environment Variables
+Create a `.env` with the values you need for your environment:
+
+```bash
+# Deployment + verification
+PRIVATE_KEY=0x...
+BASESCAN_API_KEY=...
+SIGNER_PRIVATE_KEY=0x...
+SIGNER_ADDRESS=0x...
+
+# App config
+VITE_PRIZE_POOL_ADDRESS=0x...
+VITE_NFT_CONTRACT_ADDRESS=0x...
+VITE_PAYMASTER_URL=https://api.developer.coinbase.com/rpc/v1/base/...
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_ANON_KEY=...
+NEYNAR_API_KEY=...
 ```
 
 ---
@@ -262,7 +318,7 @@ npx hardhat run scripts/deploy.js --network baseMainnet
 ### Phase 7 - Prize Pool (Completed)
 - [x] PrizePool smart contract with USDC
 - [x] Sponsor tiers: Bronze $3, Silver $5, Gold $10, Diamond $20
-- [x] 90% weekly distribution, 10% reserve
+- [x] 90% weekly distribution, 10% rollover
 - [x] Signed distribution with trusted signer
 - [x] Sponsor NFT for Gold+ donors
 - [x] Permanent game boosts for Silver+ sponsors
@@ -290,7 +346,7 @@ npx hardhat run scripts/deploy.js --network baseMainnet
 - [x] Increased swarm counts (7/12/18 per level)
 - [x] Improved NFT minting with on-chain tier checks
 - [x] Wallet provider improvements with timeout handling
-- [x] Transaction fallback system (paymaster → wallet_sendCalls → eth_sendTransaction)
+- [x] Paymaster-sponsored minting with `wallet_sendCalls` fallback
 - [ ] Daily Jackpot mode with ETH entry fees
 - [ ] Streak NFTs for consecutive play
 - [ ] Sponsor Bounty Board
@@ -309,15 +365,20 @@ Sponsors deposit USDC to fund weekly rewards for top players.
 | 🥇 Gold | $10 USDC | + Exclusive Sponsor NFT |
 | 💎 Diamond | $20 USDC | + Featured in winner casts |
 
-### Weekly Distribution (90-10)
+### Weekly Distribution (90% paid / 10% rollover)
 | Rank | % of Pool |
 |------|-----------|
 | #1 | 30% |
 | #2 | 20% |
 | #3 | 12% |
 | #4 | 8% |
-| #5-10 | 20% (split) |
-| Reserve | 10% |
+| #5 | 6% |
+| #6 | 5% |
+| #7 | 4% |
+| #8 | 3% |
+| #9 | 1% |
+| #10 | 1% |
+| Rollover | 10% (remains in pool) |
 
 ---
 

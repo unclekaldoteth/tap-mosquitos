@@ -138,9 +138,9 @@ class Game {
         this.comboTimeout = null;
 
         // Difficulty settings
-        this.baseSpawnRate = 1200; // ms between spawns
-        this.minSpawnRate = 400;
-        this.mosquitoSpeed = { min: 3000, max: 6000 }; // ms to cross screen
+        this.baseSpawnRate = 1000; // ms between spawns
+        this.minSpawnRate = 320;
+        this.mosquitoSpeed = { min: 2400, max: 5600 }; // ms to cross screen
 
         // Challenge system
         this.comboMultiplier = 1;
@@ -1265,11 +1265,21 @@ class Game {
         const elapsed = 60 - this.timeLeft;
         const difficultyFactor = Math.min(elapsed / 60, 1);
         const spawnRate = this.baseSpawnRate - (this.baseSpawnRate - this.minSpawnRate) * difficultyFactor;
+        const jitter = 240 - 140 * difficultyFactor;
 
         this.spawnInterval = setTimeout(() => {
             this.spawnMosquito();
+            const extraSpawnChance = 0.08 + difficultyFactor * 0.27;
+            if (Math.random() < extraSpawnChance) {
+                const extraDelay = 80 + Math.random() * 160;
+                setTimeout(() => {
+                    if (this.isRunning) {
+                        this.spawnMosquito();
+                    }
+                }, extraDelay);
+            }
             this.scheduleNextSpawn();
-        }, spawnRate + Math.random() * 300);
+        }, spawnRate + Math.random() * jitter);
     }
 
     // ============ SWARM EVENT SYSTEM ============
@@ -1298,15 +1308,16 @@ class Game {
         soundManager.playWarning();
 
         // Progressive spawn count based on level
-        const spawnCounts = { 1: 6, 2: 10, 3: 15 };
+        const spawnCounts = { 1: 7, 2: 12, 3: 18 };
         const count = spawnCounts[level] + Math.floor(Math.random() * 3);
+        const spawnInterval = Math.max(70, 110 - level * 10);
 
         for (let i = 0; i < count; i++) {
             setTimeout(() => {
                 if (this.isRunning) {
                     this.spawnMosquito(true, level);
                 }
-            }, i * 100);
+            }, i * spawnInterval);
         }
 
         // End swarm after 4 seconds
@@ -1342,14 +1353,22 @@ class Game {
         if (!this.isRunning) return;
 
         const elapsed = 60 - this.timeLeft;
+        const difficultyFactor = Math.min(elapsed / 60, 1);
 
         // Determine insect type with progressive hazard chance
         let type = 'normal';
+        const skullBiasBase = isSwarm ? 0.35 : 0.25;
+        const skullBias = Math.min(0.6, skullBiasBase + difficultyFactor * 0.2);
         if (isSwarm) {
-            // Hazard chance increases with swarm level: 15%, 25%, 35%
-            const hazardChance = 0.1 + (swarmLevel * 0.08);
+            // Hazard chance increases with swarm level and game time
+            const hazardChance = Math.min(0.5, 0.14 + (swarmLevel * 0.08) + difficultyFactor * 0.06);
             if (Math.random() < hazardChance) {
-                type = Math.random() < 0.3 ? 'skull' : 'bee';
+                type = Math.random() < skullBias ? 'skull' : 'bee';
+            }
+        } else {
+            const hazardChance = 0.03 + difficultyFactor * 0.09;
+            if (Math.random() < hazardChance) {
+                type = Math.random() < skullBias ? 'skull' : 'bee';
             }
         }
 
@@ -1408,14 +1427,17 @@ class Game {
         mosquito.style.left = `${startX}px`;
         mosquito.style.top = `${startY}px`;
 
-        // Calculate speed based on difficulty (hazards slightly faster)
-        const difficultyFactor = Math.min(elapsed / 60, 1);
+        // Calculate speed based on difficulty (swarms and hazards are faster)
         const speedRange = this.mosquitoSpeed.max - this.mosquitoSpeed.min;
-        let duration = this.mosquitoSpeed.max - speedRange * difficultyFactor * 0.5;
-        if (type !== 'normal') {
-            duration *= 0.85; // Hazards are 15% faster
+        const speedFactor = 0.2 + difficultyFactor * 0.55;
+        let duration = this.mosquitoSpeed.max - speedRange * speedFactor;
+        if (isSwarm) {
+            duration *= 0.92;
         }
-        const actualDuration = duration + Math.random() * 1000;
+        if (type !== 'normal') {
+            duration *= 0.82;
+        }
+        const actualDuration = duration + Math.random() * 900;
 
         // Animate movement
         const startTime = Date.now();

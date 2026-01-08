@@ -1341,6 +1341,8 @@ class Game {
     spawnMosquito(isSwarm = false, swarmLevel = 1) {
         if (!this.isRunning) return;
 
+        const elapsed = 60 - this.timeLeft;
+
         // Determine insect type with progressive hazard chance
         let type = 'normal';
         if (isSwarm) {
@@ -1348,6 +1350,18 @@ class Game {
             const hazardChance = 0.1 + (swarmLevel * 0.08);
             if (Math.random() < hazardChance) {
                 type = Math.random() < 0.3 ? 'skull' : 'bee';
+            }
+        }
+
+        // Elite mosquito spawns (only if not already a hazard)
+        if (type === 'normal') {
+            const roll = Math.random();
+            if (elapsed >= 15 && roll < 0.08) {
+                type = 'blink';      // 8% after 15s
+            } else if (elapsed >= 20 && roll < 0.13) {
+                type = 'armored';    // 5% after 20s (0.08 + 0.05)
+            } else if (elapsed >= 30 && roll < 0.16) {
+                type = 'healer';     // 3% after 30s (0.13 + 0.03)
             }
         }
 
@@ -1395,7 +1409,6 @@ class Game {
         mosquito.style.top = `${startY}px`;
 
         // Calculate speed based on difficulty (hazards slightly faster)
-        const elapsed = 60 - this.timeLeft;
         const difficultyFactor = Math.min(elapsed / 60, 1);
         const speedRange = this.mosquitoSpeed.max - this.mosquitoSpeed.min;
         let duration = this.mosquitoSpeed.max - speedRange * difficultyFactor * 0.5;
@@ -1412,7 +1425,12 @@ class Game {
             duration: actualDuration,
             startTime,
             tapped: false,
-            type: type
+            type: type,
+            // Elite mosquito state
+            cracked: false,       // For armored: true after first tap
+            blinked: false,       // For blink: true after teleport
+            healerSpawnTime: type === 'healer' ? Date.now() : null,
+            hasHealed: false      // For healer: true after buffing
         };
 
         this.mosquitoes.push(mosquitoData);
@@ -1438,6 +1456,16 @@ class Game {
         const elapsed = Date.now() - data.startTime;
         const progress = Math.min(elapsed / data.duration, 1);
 
+        // Healer mosquito activates after 3 seconds if not killed
+        if (data.type === 'healer' && !data.hasHealed && data.healerSpawnTime) {
+            const healerAlive = Date.now() - data.healerSpawnTime;
+            if (healerAlive >= 3000) {
+                data.hasHealed = true;
+                data.element.classList.add('healing');
+                this.activateHealerBuff();
+            }
+        }
+
         if (progress >= 1) {
             // Mosquito escaped
             this.mosquitoEscaped(data);
@@ -1462,15 +1490,49 @@ class Game {
     tapMosquito(e, data) {
         if (data.tapped || !this.isRunning) return;
 
-        data.tapped = true;
         const type = data.type || 'normal';
 
         // Handle hazard taps (bee or skull)
         if (type === 'bee' || type === 'skull') {
+            data.tapped = true;
             const penalty = type === 'skull' ? -100 : -50;
             this.handleHazardTap(data, penalty);
             return;
         }
+
+        // Handle Blink mosquito - teleports on first tap
+        if (type === 'blink' && !data.blinked) {
+            data.blinked = true;
+            data.element.classList.add('blinking');
+            soundManager.playSplat(); // Quick feedback
+
+            // Teleport to random position
+            const areaRect = this.playArea.getBoundingClientRect();
+            const newX = Math.random() * (areaRect.width - 64);
+            const newY = Math.random() * (areaRect.height - 64);
+
+            setTimeout(() => {
+                if (!data.element.parentNode) return;
+                data.element.style.left = `${newX}px`;
+                data.element.style.top = `${newY}px`;
+                data.startX = newX;
+                data.startY = newY;
+                data.element.classList.remove('blinking');
+            }, 150);
+            return; // Don't kill yet
+        }
+
+        // Handle Armored mosquito - requires 2 taps
+        if (type === 'armored' && !data.cracked) {
+            data.cracked = true;
+            data.element.classList.add('cracked');
+            soundManager.playSplat();
+            this.showScorePopup(data.element, 'CRACK!', false);
+            return; // Don't kill yet, wait for second tap
+        }
+
+        // Now the mosquito is killed
+        data.tapped = true;
 
         // Normal mosquito tap
         this.tappedCount++;
@@ -1492,7 +1554,15 @@ class Game {
         this.lastTapTime = now;
 
         // Calculate score with new multiplier system
-        const basePoints = 10;
+        // Elite bonus: Armored +25, Healer +30/+10, Blink +20, Normal +10
+        let basePoints = 10;
+        if (type === 'armored') {
+            basePoints = 25;
+        } else if (type === 'healer') {
+            basePoints = data.hasHealed ? 10 : 30; // Less points if healer already buffed
+        } else if (type === 'blink') {
+            basePoints = 20;
+        }
         const points = basePoints * this.comboMultiplier;
 
         this.score += points;
@@ -1641,6 +1711,27 @@ class Game {
         if (badge) {
             badge.classList.add('hidden');
         }
+    }
+
+    // Healer mosquito buff: increases speed of all active mosquitoes for 5s
+    activateHealerBuff() {
+        this.healerBuffActive = true;
+        this.healerBuffEndTime = Date.now() + 5000;
+
+        // Show warning
+        this.showSwarmWarning('HEALER BUFF! +20% SPEED');
+
+        // Increase speed of existing mosquitoes by reducing duration
+        this.mosquitoes.forEach(m => {
+            if (!m.tapped && m.type !== 'healer') {
+                m.duration *= 0.8; // 20% faster
+            }
+        });
+
+        // Clear buff after 5s
+        setTimeout(() => {
+            this.healerBuffActive = false;
+        }, 5000);
     }
 
     mosquitoEscaped(data) {

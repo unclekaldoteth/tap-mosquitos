@@ -2213,3 +2213,135 @@ body {
         0 2px 0 #800000,
         0 0 15px rgba(255, 68, 68, 0.5);
 }
+
+/* =========================================
+   ELITE MOSQUITOES
+   ========================================= */
+
+/* Armored Mosquito - Metallic shell */
+.mosquito-armored {
+    filter: drop-shadow(0 0 8px rgba(180, 180, 200, 0.8));
+    animation: fly 0.4s ease-in-out infinite alternate, armoredShine 2s linear infinite;
+}
+
+.mosquito-armored::before {
+    content: '🛡️';
+    position: absolute;
+    font-size: 10px;
+    top: -8px;
+    right: -4px;
+}
+
+.mosquito-armored.cracked {
+    filter: drop-shadow(0 0 8px rgba(255, 100, 50, 0.9));
+    animation: fly 0.3s ease-in-out infinite alternate, crackPulse 0.3s infinite;
+}
+
+.mosquito-armored.cracked::before {
+    content: '💥';
+}
+
+@keyframes armoredShine {
+
+    0%,
+    100% {
+        filter: drop-shadow(0 0 8px rgba(180, 180, 200, 0.6)) brightness(1);
+    }
+
+    50% {
+        filter: drop-shadow(0 0 12px rgba(220, 220, 255, 1)) brightness(1.2);
+    }
+}
+
+@keyframes crackPulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+    }
+
+    50% {
+        transform: scale(1.1);
+    }
+}
+
+/* Healer Mosquito - Green glow */
+.mosquito-healer {
+    filter: drop-shadow(0 0 10px rgba(0, 255, 100, 0.8));
+    animation: fly 0.5s ease-in-out infinite alternate, healerPulse 1s ease-in-out infinite;
+}
+
+.mosquito-healer::before {
+    content: '💚';
+    position: absolute;
+    font-size: 10px;
+    top: -8px;
+    right: -4px;
+}
+
+.mosquito-healer.healing {
+    filter: drop-shadow(0 0 20px rgba(0, 255, 100, 1));
+    animation: fly 0.3s ease-in-out infinite alternate, healerBurst 0.5s infinite;
+}
+
+.mosquito-healer.healing::before {
+    content: '✨';
+}
+
+@keyframes healerPulse {
+
+    0%,
+    100% {
+        filter: drop-shadow(0 0 10px rgba(0, 255, 100, 0.6));
+    }
+
+    50% {
+        filter: drop-shadow(0 0 18px rgba(0, 255, 100, 1));
+    }
+}
+
+@keyframes healerBurst {
+
+    0%,
+    100% {
+        transform: scale(1.1);
+        filter: drop-shadow(0 0 20px rgba(0, 255, 100, 1));
+    }
+
+    50% {
+        transform: scale(1.3);
+        filter: drop-shadow(0 0 30px rgba(100, 255, 150, 1));
+    }
+}
+
+/* Blink Mosquito - Purple shimmer */
+.mosquito-blink {
+    filter: drop-shadow(0 0 10px rgba(180, 0, 255, 0.8));
+    animation: fly 0.4s ease-in-out infinite alternate, blinkShimmer 0.8s linear infinite;
+}
+
+.mosquito-blink::before {
+    content: '⚡';
+    position: absolute;
+    font-size: 10px;
+    top: -8px;
+    right: -4px;
+}
+
+.mosquito-blink.blinking {
+    opacity: 0.3;
+    transform: scale(0.5);
+    transition: all 0.15s ease-out;
+}
+
+@keyframes blinkShimmer {
+
+    0%,
+    100% {
+        filter: drop-shadow(0 0 10px rgba(180, 0, 255, 0.6));
+    }
+
+    50% {
+        filter: drop-shadow(0 0 15px rgba(220, 0, 255, 1));
+    }
+}

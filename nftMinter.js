@@ -8,6 +8,19 @@ import { ethers } from 'ethers';
 import { sdk } from '@farcaster/miniapp-sdk';
 import { MOSQUITO_NFT_ABI, CONTRACT_ADDRESSES, TIER_INFO, Tier, getTierFromScore } from './contract.js';
 
+const withTimeout = (promise, ms, message) => {
+    let timeoutId;
+    const timeoutPromise = new Promise((_, reject) => {
+        timeoutId = setTimeout(() => {
+            reject(new Error(message));
+        }, ms);
+    });
+
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+        clearTimeout(timeoutId);
+    });
+};
+
 class NFTMinter {
     constructor() {
         this.provider = null;
@@ -107,11 +120,15 @@ class NFTMinter {
      * @returns {Promise<string>} Signature from backend
      */
     async fetchSignature(playerAddress, tier, score, nonce) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+
         try {
             const response = await fetch('/api/sign-achievement', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ playerAddress, tier, score, nonce })
+                body: JSON.stringify({ playerAddress, tier, score, nonce }),
+                signal: controller.signal
             });
 
             if (!response.ok) {
@@ -122,8 +139,13 @@ class NFTMinter {
             const data = await response.json();
             return data.signature;
         } catch (error) {
+            if (error.name === 'AbortError') {
+                throw new Error('Signature request timed out. Please try again.');
+            }
             console.error('Failed to get signature from backend:', error);
             throw new Error('Score verification not available. Please try again later.');
+        } finally {
+            clearTimeout(timeoutId);
         }
     }
 
@@ -160,6 +182,15 @@ class NFTMinter {
         if (paymasterUrl) {
             try {
                 const receipt = await this.sendSponsoredTransaction(tier, score, nonce, signature);
+                if (receipt?.pending) {
+                    return {
+                        hash: receipt.hash || null,
+                        tier: tier,
+                        tierInfo: TIER_INFO[tier],
+                        sponsored: true,
+                        pending: true
+                    };
+                }
                 return {
                     hash: receipt.transactionHash || receipt.hash,
                     tier: tier,
@@ -173,7 +204,16 @@ class NFTMinter {
 
         // Fallback: Regular transaction (user pays gas)
         const tx = await this.contract.mintAchievement(tier, score, nonce, signature);
-        const receipt = await tx.wait();
+        const receipt = await this.waitForReceipt(tx.hash, 20000);
+        if (!receipt) {
+            return {
+                hash: tx.hash,
+                tier: tier,
+                tierInfo: TIER_INFO[tier],
+                sponsored: false,
+                pending: true
+            };
+        }
 
         return {
             hash: receipt.hash,
@@ -226,32 +266,53 @@ class NFTMinter {
         }
 
         // Send sponsored transaction
-        const result = await rawProvider.request({
-            method: 'wallet_sendCalls',
-            params: [{
-                version: '1.0',
-                from: await this.signer.getAddress(),
-                calls: [{
-                    to: this.contractAddress,
-                    data: calldata,
-                    value: '0x0'
-                }],
-                capabilities: {
-                    paymasterService: {
-                        url: paymasterUrl
+        const result = await withTimeout(
+            rawProvider.request({
+                method: 'wallet_sendCalls',
+                params: [{
+                    version: '1.0',
+                    from: await this.signer.getAddress(),
+                    calls: [{
+                        to: this.contractAddress,
+                        data: calldata,
+                        value: '0x0'
+                    }],
+                    capabilities: {
+                        paymasterService: {
+                            url: paymasterUrl
+                        }
                     }
-                }
-            }]
-        });
+                }]
+            }),
+            15000,
+            'Wallet request timed out'
+        );
 
-        // Wait for transaction confirmation
-        // result may be a transaction hash or a call ID depending on wallet
-        if (typeof result === 'string' && result.startsWith('0x')) {
-            const receipt = await this.provider.waitForTransaction(result);
-            return receipt;
+        const txHash = typeof result === 'object'
+            ? (result?.transactionHash || result?.hash || null)
+            : result;
+
+        if (typeof txHash === 'string' && txHash.startsWith('0x')) {
+            const receipt = await this.waitForReceipt(txHash, 15000);
+            if (receipt) return receipt;
         }
 
-        return { hash: result, transactionHash: result };
+        return { hash: typeof txHash === 'string' ? txHash : null, pending: true };
+    }
+
+    async waitForReceipt(txHash, timeoutMs) {
+        if (!this.provider || !txHash) return null;
+
+        try {
+            return await withTimeout(
+                this.provider.waitForTransaction(txHash),
+                timeoutMs,
+                'Transaction confirmation timed out'
+            );
+        } catch (error) {
+            console.log('Transaction wait timed out:', error.message);
+            return null;
+        }
     }
 
     /**

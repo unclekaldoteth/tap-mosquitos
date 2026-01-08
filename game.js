@@ -2174,6 +2174,15 @@ Can you beat my score?`;
             // Attempt to mint
             const result = await nftMinter.mintAchievement(tier, this.score);
 
+            if (result?.pending) {
+                this.mintBtn.classList.remove('loading');
+                this.mintBtn.textContent = '⏳ CHECK WALLET';
+                this.mintBtn.disabled = true;
+                const hashText = result.hash ? `\n\nTx: ${result.hash}` : '';
+                alert(`Transaction submitted. Confirm in your wallet and wait for it to finalize.${hashText}`);
+                return;
+            }
+
             // Success!
             this.mintBtn.classList.remove('loading');
             this.mintBtn.classList.add('success');

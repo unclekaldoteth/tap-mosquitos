@@ -28,6 +28,7 @@ class NFTMinter {
         this.signer = null;
         this.contract = null;
         this.contractAddress = null;
+        this.chainId = null;
         this.isInitialized = false;
     }
 
@@ -70,6 +71,7 @@ class NFTMinter {
             // Check network and set contract address
             const network = await this.provider.getNetwork();
             const chainId = Number(network.chainId);
+            this.chainId = chainId;
 
             if (chainId === 8453) {
                 // Base Mainnet
@@ -136,6 +138,15 @@ class NFTMinter {
         }
         this.signer = await this.provider.getSigner();
         this.rawProvider = rawProvider;
+
+        try {
+            const chainHex = await rawProvider.request({ method: 'eth_chainId' });
+            if (chainHex) {
+                this.chainId = Number.parseInt(chainHex, 16);
+            }
+        } catch (error) {
+            console.log('Failed to read chainId:', error?.message || error);
+        }
 
         if (this.contractAddress && this.contract) {
             this.contract = this.contract.connect(this.signer);
@@ -235,13 +246,14 @@ class NFTMinter {
         // Generate nonce and get signature from backend
         const nonce = Date.now();
         const signature = await this.fetchSignature(account, tier, score, nonce);
+        const calldata = this.getMintCalldata(tier, score, nonce, signature);
 
         // Try sponsored transaction first (gas-free for user)
         const paymasterUrl = import.meta.env.VITE_PAYMASTER_URL;
 
         if (paymasterUrl) {
             try {
-                const receipt = await this.sendSponsoredTransaction(tier, score, nonce, signature);
+                const receipt = await this.sendCallsTransaction(calldata, paymasterUrl);
                 if (receipt?.pending) {
                     return {
                         hash: receipt.hash || null,
@@ -262,12 +274,34 @@ class NFTMinter {
             }
         }
 
+        // Fallback: wallet_sendCalls without paymaster
+        try {
+            const receipt = await this.sendCallsTransaction(calldata, null);
+            if (receipt?.pending) {
+                return {
+                    hash: receipt.hash || null,
+                    tier: tier,
+                    tierInfo: TIER_INFO[tier],
+                    sponsored: false,
+                    pending: true
+                };
+            }
+            return {
+                hash: receipt.transactionHash || receipt.hash,
+                tier: tier,
+                tierInfo: TIER_INFO[tier],
+                sponsored: false
+            };
+        } catch (sendCallsError) {
+            console.log('wallet_sendCalls failed, falling back to eth_sendTransaction:', sendCallsError.message);
+        }
+
         // Fallback: Regular transaction (user pays gas)
-        const tx = await this.contract.mintAchievement(tier, score, nonce, signature);
-        const receipt = await this.waitForReceipt(tx.hash, 20000);
+        const txHash = await this.sendLegacyTransaction(calldata, account);
+        const receipt = await this.waitForReceipt(txHash, 20000);
         if (!receipt) {
             return {
-                hash: tx.hash,
+                hash: txHash,
                 tier: tier,
                 tierInfo: TIER_INFO[tier],
                 sponsored: false,
@@ -284,29 +318,23 @@ class NFTMinter {
     }
 
     /**
-     * Send sponsored transaction using wallet_sendCalls with paymaster
-     * @param {number} tier - Tier enum value
-     * @param {number} score - Score achieved
-     * @param {number} nonce - Unique nonce
-     * @param {string} signature - Backend signature
+     * Build calldata for mintAchievement
      */
-    async sendSponsoredTransaction(tier, score, nonce, signature) {
-        const paymasterUrl = import.meta.env.VITE_PAYMASTER_URL;
-        if (!paymasterUrl) {
-            throw new Error('Paymaster URL not configured');
-        }
-
-        // Encode the function call
+    getMintCalldata(tier, score, nonce, signature) {
         const iface = new ethers.Interface(MOSQUITO_NFT_ABI);
-        const calldata = iface.encodeFunctionData('mintAchievement', [tier, score, nonce, signature]);
+        return iface.encodeFunctionData('mintAchievement', [tier, score, nonce, signature]);
+    }
 
+    /**
+     * Send transaction using wallet_sendCalls
+     */
+    async sendCallsTransaction(calldata, paymasterUrl = null) {
         const rawProvider = await this.getRawProvider();
 
-        if (!rawProvider) {
+        if (!rawProvider?.request) {
             throw new Error('No Ethereum provider available');
         }
 
-        // Check if wallet supports EIP-5792 (wallet_sendCalls)
         try {
             const capabilities = await rawProvider.request({
                 method: 'wallet_getCapabilities',
@@ -317,28 +345,33 @@ class NFTMinter {
             console.log('wallet_getCapabilities not supported, trying sendCalls anyway');
         }
 
-        // Send sponsored transaction
-        const network = await this.provider.getNetwork();
-        const chainId = ethers.toBeHex(Number(network.chainId));
+        const chainId = this.chainId ? ethers.toBeHex(this.chainId) : undefined;
+        const params = {
+            version: '1.0',
+            from: await this.signer.getAddress(),
+            calls: [{
+                to: this.contractAddress,
+                data: calldata,
+                value: '0x0'
+            }]
+        };
+
+        if (chainId) {
+            params.chainId = chainId;
+        }
+
+        if (paymasterUrl) {
+            params.capabilities = {
+                paymasterService: {
+                    url: paymasterUrl
+                }
+            };
+        }
 
         const result = await withTimeout(
             rawProvider.request({
                 method: 'wallet_sendCalls',
-                params: [{
-                    version: '1.0',
-                    chainId,
-                    from: await this.signer.getAddress(),
-                    calls: [{
-                        to: this.contractAddress,
-                        data: calldata,
-                        value: '0x0'
-                    }],
-                    capabilities: {
-                        paymasterService: {
-                            url: paymasterUrl
-                        }
-                    }
-                }]
+                params: [params]
             }),
             15000,
             'Wallet request timed out'
@@ -354,6 +387,33 @@ class NFTMinter {
         }
 
         return { hash: typeof txHash === 'string' ? txHash : null, pending: true };
+    }
+
+    async sendLegacyTransaction(calldata, from) {
+        const rawProvider = await this.getRawProvider();
+        if (!rawProvider?.request) {
+            throw new Error('No Ethereum provider available');
+        }
+
+        const txHash = await withTimeout(
+            rawProvider.request({
+                method: 'eth_sendTransaction',
+                params: [{
+                    from,
+                    to: this.contractAddress,
+                    data: calldata,
+                    value: '0x0'
+                }]
+            }),
+            15000,
+            'Wallet request timed out'
+        );
+
+        if (typeof txHash !== 'string' || !txHash.startsWith('0x')) {
+            throw new Error('Transaction rejected by wallet');
+        }
+
+        return txHash;
     }
 
     async waitForReceipt(txHash, timeoutMs) {

@@ -1921,7 +1921,7 @@ class Game {
             this.renderLeaderboard();
 
             // Update mint button visibility
-            this.updateMintButton();
+            await this.updateMintButton();
 
             // Show game over screen
             this.gameOverScreen.classList.remove('hidden');
@@ -2136,8 +2136,35 @@ Can you beat my score?`;
         }
 
         try {
-            // Get the best tier for current score
-            const tier = nftMinter.getBestTierForScore(this.score);
+            const bestTier = nftMinter.getBestTierForScore(this.score);
+            let tier = bestTier;
+            let claimableTier;
+
+            try {
+                claimableTier = await nftMinter.getBestClaimableTier(this.walletAddress, this.score);
+            } catch (error) {
+                console.log('Failed to check claimable tiers:', error);
+            }
+
+            if (claimableTier === null) {
+                const bestTierInfo = nftMinter.getTierInfo(bestTier);
+                throw new Error(`Already claimed ${bestTierInfo.name}`);
+            }
+
+            if (typeof claimableTier === 'number') {
+                tier = claimableTier;
+            }
+
+            if (typeof claimableTier === 'number' && claimableTier < bestTier) {
+                const bestTierInfo = nftMinter.getTierInfo(bestTier);
+                const claimableTierInfo = nftMinter.getTierInfo(claimableTier);
+                const shouldMint = confirm(`${bestTierInfo.name} already minted. Mint ${claimableTierInfo.name} instead?`);
+                if (!shouldMint) {
+                    await this.updateMintButton();
+                    return;
+                }
+            }
+
             const tierInfo = nftMinter.getTierInfo(tier);
 
             // Show loading state
@@ -2175,33 +2202,68 @@ Can you beat my score?`;
 
             // Reset button
             this.mintBtn.classList.remove('loading');
-            this.mintBtn.textContent = '🎖️ MINT NFT';
+            this.mintBtn.classList.remove('success');
 
-            // Show error
-            if (error.message.includes('Already claimed')) {
-                alert('You already minted this tier! Try to beat your score for a higher tier.');
-            } else if (error.message.includes('not available')) {
+            const rawMessage = error?.shortMessage
+                || error?.reason
+                || error?.message
+                || error?.data?.message
+                || error?.info?.error?.message
+                || 'Minting failed';
+            const normalized = rawMessage.toLowerCase();
+
+            if (normalized.includes('already claimed')) {
+                alert('You already minted this tier. Beat your score to unlock a higher tier.');
+            } else if (normalized.includes('invalid signature') || normalized.includes('signature')) {
+                alert('Signature verification failed. Please try again in a moment.');
+            } else if (normalized.includes('not available') || normalized.includes('not deployed')) {
                 alert('NFT minting is not available yet. Contract not deployed.');
-            } else if (error.message.includes('rejected')) {
+            } else if (normalized.includes('rejected') || error?.code === 4001) {
                 alert('Transaction was rejected.');
+            } else if (normalized.includes('insufficient funds')) {
+                alert('Insufficient funds for gas.');
             } else {
-                alert(`Minting failed: ${error.message}`);
+                alert(`Minting failed: ${rawMessage}`);
             }
+
+            await this.updateMintButton();
         }
     }
 
     // Check if player can mint and show/hide button
-    updateMintButton() {
+    async updateMintButton() {
         if (!this.walletAddress || !nftMinter.isAvailable()) {
             this.mintBtn.classList.add('hidden');
             return;
         }
 
-        const tier = nftMinter.getBestTierForScore(this.score);
-        const tierInfo = nftMinter.getTierInfo(tier);
+        this.mintBtn.classList.remove('hidden');
+        this.mintBtn.classList.remove('loading');
+        this.mintBtn.classList.remove('success');
+        this.mintBtn.disabled = false;
+
+        const bestTier = nftMinter.getBestTierForScore(this.score);
+        let tierToShow = bestTier;
+
+        try {
+            const claimableTier = await nftMinter.getBestClaimableTier(this.walletAddress, this.score);
+            if (claimableTier === null) {
+                const bestTierInfo = nftMinter.getTierInfo(bestTier);
+                this.mintBtn.textContent = `✅ ${bestTierInfo.name.toUpperCase()} MINTED`;
+                this.mintBtn.disabled = true;
+                return;
+            }
+
+            if (typeof claimableTier === 'number') {
+                tierToShow = claimableTier;
+            }
+        } catch (error) {
+            console.log('Failed to check claimable tiers:', error);
+        }
+
+        const tierInfo = nftMinter.getTierInfo(tierToShow);
 
         // Show mint button with tier info
-        this.mintBtn.classList.remove('hidden');
         this.mintBtn.textContent = `🎖️ MINT ${tierInfo.name.toUpperCase()}`;
     }
 

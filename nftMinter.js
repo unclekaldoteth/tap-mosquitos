@@ -272,6 +272,47 @@ class NFTMinter {
     }
 
     /**
+     * Get claimable tiers for a score (on-chain check)
+     * @param {string} address - Player address
+     * @param {number} score - Score achieved
+     */
+    async getClaimableTiers(address, score) {
+        if (!address) return null;
+
+        if (!this.isInitialized) {
+            const initialized = await this.init();
+            if (!initialized) return null;
+        }
+
+        if (!this.contract) return null;
+
+        try {
+            const claimable = await this.contract.getClaimableTiers(address, score);
+            return Array.from(claimable);
+        } catch (error) {
+            console.error('Error checking claimable tiers:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Get highest claimable tier for a score
+     * Returns undefined if status can't be checked, null if none claimable.
+     */
+    async getBestClaimableTier(address, score) {
+        const claimable = await this.getClaimableTiers(address, score);
+        if (!claimable) return undefined;
+
+        for (let i = claimable.length - 1; i >= 0; i--) {
+            if (claimable[i]) {
+                return i;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Get best achievable tier for a score
      */
     getBestTierForScore(score) {

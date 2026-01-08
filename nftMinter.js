@@ -23,6 +23,7 @@ const withTimeout = (promise, ms, message) => {
 
 class NFTMinter {
     constructor() {
+        this.rawProvider = null;
         this.provider = null;
         this.signer = null;
         this.contract = null;
@@ -30,22 +31,32 @@ class NFTMinter {
         this.isInitialized = false;
     }
 
+    async getRawProvider() {
+        if (this.rawProvider) return this.rawProvider;
+
+        let rawProvider = null;
+        try {
+            rawProvider = await sdk.wallet.getEthereumProvider();
+        } catch (sdkError) {
+            console.log('SDK provider not available:', sdkError.message);
+        }
+
+        if (!rawProvider && sdk.wallet?.ethProvider) {
+            rawProvider = sdk.wallet.ethProvider;
+        }
+
+        if (!rawProvider && typeof window !== 'undefined' && window.ethereum) {
+            rawProvider = window.ethereum;
+            console.log('Using window.ethereum as provider');
+        }
+
+        this.rawProvider = rawProvider;
+        return rawProvider;
+    }
+
     async init() {
         try {
-            let rawProvider = null;
-
-            // Try SDK provider first (Mini App context)
-            try {
-                rawProvider = await sdk.wallet.getEthereumProvider();
-            } catch (sdkError) {
-                console.log('SDK provider not available:', sdkError.message);
-            }
-
-            // Fallback to window.ethereum (MetaMask/browser)
-            if (!rawProvider && typeof window !== 'undefined' && window.ethereum) {
-                rawProvider = window.ethereum;
-                console.log('Using window.ethereum as provider');
-            }
+            const rawProvider = await this.getRawProvider();
 
             if (!rawProvider) {
                 console.log('No Ethereum provider available');
@@ -91,6 +102,54 @@ class NFTMinter {
         }
     }
 
+    async ensureWalletAccess() {
+        let rawProvider = null;
+        try {
+            rawProvider = await sdk.wallet.getEthereumProvider();
+        } catch (sdkError) {
+            console.log('SDK provider not available:', sdkError.message);
+        }
+
+        if (!rawProvider && sdk.wallet?.ethProvider) {
+            rawProvider = sdk.wallet.ethProvider;
+        }
+
+        if (!rawProvider) {
+            rawProvider = await this.getRawProvider();
+        }
+
+        if (!rawProvider?.request) {
+            throw new Error('No Ethereum provider available');
+        }
+
+        const accounts = await withTimeout(
+            rawProvider.request({ method: 'eth_requestAccounts' }),
+            12000,
+            'Wallet connection timed out'
+        );
+        if (!accounts || accounts.length === 0) {
+            throw new Error('No wallet connected');
+        }
+
+        if (!this.provider || rawProvider !== this.rawProvider) {
+            this.provider = new ethers.BrowserProvider(rawProvider);
+        }
+        this.signer = await this.provider.getSigner();
+        this.rawProvider = rawProvider;
+
+        if (this.contractAddress && this.contract) {
+            this.contract = this.contract.connect(this.signer);
+        } else if (this.contractAddress) {
+            this.contract = new ethers.Contract(
+                this.contractAddress,
+                MOSQUITO_NFT_ABI,
+                this.signer
+            );
+        }
+
+        return accounts[0];
+    }
+
     async getAccount() {
         if (!this.signer) return null;
         try {
@@ -101,11 +160,9 @@ class NFTMinter {
     }
 
     async requestAccount() {
-        if (!this.provider) return null;
         try {
-            await this.provider.send('eth_requestAccounts', []);
-            this.signer = await this.provider.getSigner();
-            return await this.signer.getAddress();
+            const account = await this.ensureWalletAccess();
+            return account;
         } catch {
             return null;
         }
@@ -163,7 +220,10 @@ class NFTMinter {
             }
         }
 
-        // Get account
+        // Ensure wallet access for this user action
+        await this.ensureWalletAccess();
+
+        // Get account (fallback if needed)
         let account = await this.getAccount();
         if (!account) {
             account = await this.requestAccount();
@@ -240,15 +300,7 @@ class NFTMinter {
         const iface = new ethers.Interface(MOSQUITO_NFT_ABI);
         const calldata = iface.encodeFunctionData('mintAchievement', [tier, score, nonce, signature]);
 
-        // Get the raw provider for wallet_sendCalls
-        let rawProvider = null;
-        try {
-            rawProvider = await sdk.wallet.getEthereumProvider();
-        } catch {
-            if (typeof window !== 'undefined' && window.ethereum) {
-                rawProvider = window.ethereum;
-            }
-        }
+        const rawProvider = await this.getRawProvider();
 
         if (!rawProvider) {
             throw new Error('No Ethereum provider available');
@@ -266,11 +318,15 @@ class NFTMinter {
         }
 
         // Send sponsored transaction
+        const network = await this.provider.getNetwork();
+        const chainId = ethers.toBeHex(Number(network.chainId));
+
         const result = await withTimeout(
             rawProvider.request({
                 method: 'wallet_sendCalls',
                 params: [{
                     version: '1.0',
+                    chainId,
                     from: await this.signer.getAddress(),
                     calls: [{
                         to: this.contractAddress,

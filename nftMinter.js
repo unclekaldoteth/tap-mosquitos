@@ -29,7 +29,17 @@ class NFTMinter {
         this.contract = null;
         this.contractAddress = null;
         this.chainId = null;
+        this.account = null;
         this.isInitialized = false;
+    }
+
+    async getContextAddress() {
+        try {
+            const context = await sdk.context;
+            return context?.user?.wallet?.address || context?.user?.connectedAddress || null;
+        } catch {
+            return null;
+        }
     }
 
     async getRawProvider() {
@@ -124,12 +134,39 @@ class NFTMinter {
             throw new Error('No Ethereum provider available');
         }
 
-        const accounts = await withTimeout(
-            rawProvider.request({ method: 'eth_requestAccounts' }),
-            12000,
-            'Wallet connection timed out'
-        );
-        if (!accounts || accounts.length === 0) {
+        let account = null;
+        try {
+            const accounts = await withTimeout(
+                rawProvider.request({ method: 'eth_accounts' }),
+                4000,
+                'Wallet lookup timed out'
+            );
+            account = accounts?.[0] || null;
+        } catch (error) {
+            console.log('eth_accounts not available:', error?.message || error);
+        }
+
+        if (!account) {
+            const contextAddress = await this.getContextAddress();
+            if (contextAddress) {
+                account = contextAddress;
+            }
+        }
+
+        if (!account) {
+            try {
+                const accounts = await withTimeout(
+                    rawProvider.request({ method: 'eth_requestAccounts' }),
+                    12000,
+                    'Wallet connection timed out'
+                );
+                account = accounts?.[0] || null;
+            } catch (error) {
+                console.log('eth_requestAccounts failed:', error?.message || error);
+            }
+        }
+
+        if (!account) {
             throw new Error('No wallet connected');
         }
 
@@ -158,7 +195,8 @@ class NFTMinter {
             );
         }
 
-        return accounts[0];
+        this.account = account;
+        return account;
     }
 
     async getAccount() {
@@ -235,7 +273,7 @@ class NFTMinter {
         await this.ensureWalletAccess();
 
         // Get account (fallback if needed)
-        let account = await this.getAccount();
+        let account = this.account || await this.getAccount();
         if (!account) {
             account = await this.requestAccount();
         }
@@ -346,9 +384,10 @@ class NFTMinter {
         }
 
         const chainId = this.chainId ? ethers.toBeHex(this.chainId) : undefined;
+        const from = this.account || await this.signer.getAddress();
         const params = {
             version: '1.0',
-            from: await this.signer.getAddress(),
+            from,
             calls: [{
                 to: this.contractAddress,
                 data: calldata,
@@ -464,7 +503,11 @@ class NFTMinter {
         if (!this.contract) return null;
 
         try {
-            const claimable = await this.contract.getClaimableTiers(address, score);
+            const claimable = await withTimeout(
+                this.contract.getClaimableTiers(address, score),
+                6000,
+                'Claimable tier lookup timed out'
+            );
             return Array.from(claimable);
         } catch (error) {
             console.error('Error checking claimable tiers:', error);

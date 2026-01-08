@@ -128,6 +128,7 @@ class Game {
         this.winStreak = 0;
         this.totalWins = 0;
         this.previousHighscore = this.highscore;
+        this.isMinting = false;
 
         // Stats
         this.tappedCount = 0;
@@ -178,6 +179,14 @@ class Game {
         this.walletBtn.addEventListener('click', () => this.handleWalletClick());
         this.shareBtn.addEventListener('click', () => this.shareScore());
         this.mintBtn.addEventListener('click', () => this.mintNFT());
+        this.mintBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            this.mintNFT();
+        }, { passive: false });
+        this.mintBtn.addEventListener('pointerup', (e) => {
+            e.preventDefault();
+            this.mintNFT();
+        });
         this.soundToggle.addEventListener('click', () => this.toggleSound());
         this.menuBtn.addEventListener('click', () => this.goToMainMenu());
 
@@ -2131,11 +2140,15 @@ Can you beat my score?`;
             return;
         }
 
-        if (this.mintBtn.classList.contains('loading')) {
+        if (this.isMinting || this.mintBtn.classList.contains('loading')) {
             return; // Already minting
         }
 
         try {
+            this.isMinting = true;
+            this.mintBtn.classList.add('loading');
+            this.mintBtn.textContent = '⏳ MINTING...';
+
             const bestTier = nftMinter.getBestTierForScore(this.score);
             let tier = bestTier;
             let claimableTier;
@@ -2166,10 +2179,6 @@ Can you beat my score?`;
             }
 
             const tierInfo = nftMinter.getTierInfo(tier);
-
-            // Show loading state
-            this.mintBtn.classList.add('loading');
-            this.mintBtn.textContent = '⏳ MINTING...';
 
             // Attempt to mint
             const result = await nftMinter.mintAchievement(tier, this.score);
@@ -2236,6 +2245,8 @@ Can you beat my score?`;
             }
 
             await this.updateMintButton();
+        } finally {
+            this.isMinting = false;
         }
     }
 

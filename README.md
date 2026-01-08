@@ -20,6 +20,7 @@ Tap That Mosquito is a fast-paced tapping game where players score points by eli
 ### For Players
 - 60-second timed gameplay with progressive difficulty
 - **Swarm Events**: Random bursts of insects with hazards
+- **Elite Mosquitoes**: Armored (2-tap), Healer (speed buff), Blink (teleport)
 - **Combo Multiplier**: 5 taps = 2x, 10 taps = 3x points
 - **Hazard System**: Avoid bees (-50 pts) and skulls (-100 pts)
 - Five achievement tiers: Common, Uncommon, Rare, Epic, Legendary
@@ -281,6 +282,18 @@ npx hardhat run scripts/deploy.js --network baseMainnet
 - [x] Challenge notification opt-in button
 - [x] Revamped Challenge Modal with glassmorphism design
 - [x] Polished notification status messages
+
+### Phase 9 - Hardcore Mode (In Progress)
+- [x] Elite Mosquitoes: Armored (2-tap, +25 pts), Healer (+20% speed buff), Blink (teleport)
+- [x] Faster spawn rates (1000ms base, 320ms min)
+- [x] Progressive difficulty with extra spawn chances
+- [x] Increased swarm counts (7/12/18 per level)
+- [x] Improved NFT minting with on-chain tier checks
+- [x] Wallet provider improvements with timeout handling
+- [x] Transaction fallback system (paymaster → wallet_sendCalls → eth_sendTransaction)
+- [ ] Daily Jackpot mode with ETH entry fees
+- [ ] Streak NFTs for consecutive play
+- [ ] Sponsor Bounty Board
 
 ---
 

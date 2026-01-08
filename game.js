@@ -2149,39 +2149,25 @@ Can you beat my score?`;
             this.mintBtn.classList.add('loading');
             this.mintBtn.textContent = '⏳ MINTING...';
 
-            const bestTier = nftMinter.getBestTierForScore(this.score);
-            let tier = bestTier;
-            let claimableTier;
-
-            try {
-                claimableTier = await nftMinter.getBestClaimableTier(this.walletAddress, this.score);
-            } catch (error) {
-                console.log('Failed to check claimable tiers:', error);
-            }
-
-            if (claimableTier === null) {
-                const bestTierInfo = nftMinter.getTierInfo(bestTier);
-                throw new Error(`Already claimed ${bestTierInfo.name}`);
-            }
-
-            if (typeof claimableTier === 'number') {
-                tier = claimableTier;
-            }
-
-            if (typeof claimableTier === 'number' && claimableTier < bestTier) {
-                const bestTierInfo = nftMinter.getTierInfo(bestTier);
-                const claimableTierInfo = nftMinter.getTierInfo(claimableTier);
-                const shouldMint = confirm(`${bestTierInfo.name} already minted. Mint ${claimableTierInfo.name} instead?`);
-                if (!shouldMint) {
-                    await this.updateMintButton();
-                    return;
-                }
-            }
-
+            const tier = nftMinter.getBestTierForScore(this.score);
             const tierInfo = nftMinter.getTierInfo(tier);
 
-            // Attempt to mint
-            const result = await nftMinter.mintAchievement(tier, this.score);
+            // Attempt to mint with timeout guard
+            const result = await new Promise((resolve, reject) => {
+                const timeoutId = setTimeout(() => {
+                    reject(new Error('Minting timed out. Please try again.'));
+                }, 25000);
+
+                nftMinter.mintAchievement(tier, this.score)
+                    .then((value) => {
+                        clearTimeout(timeoutId);
+                        resolve(value);
+                    })
+                    .catch((err) => {
+                        clearTimeout(timeoutId);
+                        reject(err);
+                    });
+            });
 
             if (result?.pending) {
                 this.mintBtn.classList.remove('loading');

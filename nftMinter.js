@@ -35,7 +35,7 @@ class NFTMinter {
 
     async getContextAddress() {
         try {
-            const context = await sdk.context;
+            const context = await withTimeout(sdk.context, 4000, 'Context lookup timed out');
             return context?.user?.wallet?.address || context?.user?.connectedAddress || null;
         } catch {
             return null;
@@ -47,7 +47,11 @@ class NFTMinter {
 
         let rawProvider = null;
         try {
-            rawProvider = await sdk.wallet.getEthereumProvider();
+            rawProvider = await withTimeout(
+                sdk.wallet.getEthereumProvider(),
+                4000,
+                'Provider lookup timed out'
+            );
         } catch (sdkError) {
             console.log('SDK provider not available:', sdkError.message);
         }
@@ -115,11 +119,17 @@ class NFTMinter {
     }
 
     async ensureWalletAccess() {
-        let rawProvider = null;
-        try {
-            rawProvider = await sdk.wallet.getEthereumProvider();
-        } catch (sdkError) {
-            console.log('SDK provider not available:', sdkError.message);
+        let rawProvider = this.rawProvider;
+        if (!rawProvider) {
+            try {
+                rawProvider = await withTimeout(
+                    sdk.wallet.getEthereumProvider(),
+                    4000,
+                    'Provider lookup timed out'
+                );
+            } catch (sdkError) {
+                console.log('SDK provider not available:', sdkError.message);
+            }
         }
 
         if (!rawProvider && sdk.wallet?.ethProvider) {
@@ -135,15 +145,31 @@ class NFTMinter {
         }
 
         let account = null;
+        let requestError = null;
+
         try {
             const accounts = await withTimeout(
-                rawProvider.request({ method: 'eth_accounts' }),
-                4000,
-                'Wallet lookup timed out'
+                rawProvider.request({ method: 'eth_requestAccounts' }),
+                12000,
+                'Wallet connection timed out'
             );
             account = accounts?.[0] || null;
         } catch (error) {
-            console.log('eth_accounts not available:', error?.message || error);
+            requestError = error;
+            console.log('eth_requestAccounts failed:', error?.message || error);
+        }
+
+        if (!account) {
+            try {
+                const accounts = await withTimeout(
+                    rawProvider.request({ method: 'eth_accounts' }),
+                    4000,
+                    'Wallet lookup timed out'
+                );
+                account = accounts?.[0] || null;
+            } catch (error) {
+                console.log('eth_accounts not available:', error?.message || error);
+            }
         }
 
         if (!account) {
@@ -154,19 +180,9 @@ class NFTMinter {
         }
 
         if (!account) {
-            try {
-                const accounts = await withTimeout(
-                    rawProvider.request({ method: 'eth_requestAccounts' }),
-                    12000,
-                    'Wallet connection timed out'
-                );
-                account = accounts?.[0] || null;
-            } catch (error) {
-                console.log('eth_requestAccounts failed:', error?.message || error);
+            if (requestError) {
+                throw requestError;
             }
-        }
-
-        if (!account) {
             throw new Error('No wallet connected');
         }
 
@@ -183,6 +199,18 @@ class NFTMinter {
             }
         } catch (error) {
             console.log('Failed to read chainId:', error?.message || error);
+        }
+        if (!this.chainId) {
+            try {
+                const network = await withTimeout(
+                    this.provider.getNetwork(),
+                    4000,
+                    'Network lookup timed out'
+                );
+                this.chainId = Number(network.chainId);
+            } catch (error) {
+                console.log('Failed to read network chainId:', error?.message || error);
+            }
         }
 
         if (this.contractAddress && this.contract) {
@@ -374,13 +402,30 @@ class NFTMinter {
         }
 
         try {
-            const capabilities = await rawProvider.request({
-                method: 'wallet_getCapabilities',
-                params: []
-            });
+            const capabilities = await withTimeout(
+                rawProvider.request({
+                    method: 'wallet_getCapabilities',
+                    params: []
+                }),
+                2000,
+                'Capabilities lookup timed out'
+            );
             console.log('Wallet capabilities:', capabilities);
         } catch (e) {
             console.log('wallet_getCapabilities not supported, trying sendCalls anyway');
+        }
+
+        if (!this.chainId && this.provider) {
+            try {
+                const network = await withTimeout(
+                    this.provider.getNetwork(),
+                    4000,
+                    'Network lookup timed out'
+                );
+                this.chainId = Number(network.chainId);
+            } catch (error) {
+                console.log('Failed to read network chainId:', error?.message || error);
+            }
         }
 
         const chainId = this.chainId ? ethers.toBeHex(this.chainId) : undefined;

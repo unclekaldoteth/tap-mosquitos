@@ -394,88 +394,163 @@ function formatUsername(username) {
 }
 
 async function fetchNotificationTokens(fid) {
-    if (!supabase || fid === null || fid === undefined) return [];
+    console.log('[Notification] Fetching tokens for FID:', fid);
+
+    if (!supabase) {
+        console.warn('[Notification] Supabase not configured, skipping token fetch');
+        return [];
+    }
+    if (fid === null || fid === undefined) {
+        console.warn('[Notification] FID is null/undefined, skipping token fetch');
+        return [];
+    }
+
     const parsedFid = Number.parseInt(fid, 10);
-    if (!Number.isFinite(parsedFid)) return [];
+    if (!Number.isFinite(parsedFid)) {
+        console.warn('[Notification] Invalid FID format:', fid);
+        return [];
+    }
+
     const { data, error } = await supabase
         .from('notification_tokens')
         .select('token, url')
         .eq('fid', parsedFid);
 
     if (error) {
-        console.error('Failed to load notification tokens:', error);
+        console.error('[Notification] Failed to load tokens for FID', parsedFid, ':', error);
         return [];
     }
 
+    console.log('[Notification] Found', data?.length || 0, 'token(s) for FID', parsedFid);
     return data || [];
 }
 
 async function sendNotification(tokens, payload) {
-    if (!tokens || tokens.length === 0) return false;
+    console.log('[Notification] Attempting to send:', {
+        notificationId: payload.notificationId,
+        title: payload.title,
+        tokenCount: tokens?.length || 0
+    });
+
+    if (!tokens || tokens.length === 0) {
+        console.warn('[Notification] No tokens provided, cannot send notification');
+        return false;
+    }
 
     const grouped = new Map();
     for (const item of tokens) {
-        if (!item?.token || !item?.url) continue;
+        if (!item?.token || !item?.url) {
+            console.warn('[Notification] Skipping invalid token entry:', item);
+            continue;
+        }
         if (!grouped.has(item.url)) {
             grouped.set(item.url, []);
         }
         grouped.get(item.url).push(item.token);
     }
 
+    console.log('[Notification] Sending to', grouped.size, 'unique endpoint(s)');
+
     let delivered = false;
     for (const [url, tokenList] of grouped.entries()) {
         if (!tokenList.length) continue;
+
+        const requestBody = {
+            ...payload,
+            token: tokenList[0],
+            tokens: tokenList
+        };
+
+        console.log('[Notification] POST to:', url.substring(0, 50) + '...');
+        console.log('[Notification] Payload:', JSON.stringify(requestBody, null, 2));
+
         try {
             const response = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    ...payload,
-                    token: tokenList[0],
-                    tokens: tokenList
-                })
+                body: JSON.stringify(requestBody)
             });
+
             if (response.ok) {
+                console.log('[Notification] ✅ Successfully delivered to', url.substring(0, 50));
                 delivered = true;
             } else {
                 const detail = await response.text();
-                console.error('Notification request failed:', response.status, detail);
+                console.error('[Notification] ❌ Request failed:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    detail: detail.substring(0, 200)
+                });
             }
         } catch (e) {
-            console.error('Failed to send notification:', e);
+            console.error('[Notification] ❌ Network error:', e.message);
         }
     }
+
+    console.log('[Notification] Final delivery status:', delivered ? 'SUCCESS' : 'FAILED');
     return delivered;
 }
 
 // Helper: Send challenge notification
 async function sendChallengeNotification(opponentFid, challengerUsername, challengeId) {
-    const tokens = await fetchNotificationTokens(opponentFid);
-    if (!tokens.length) return false;
+    console.log('[Challenge Notification] Sending challenge notification:', {
+        opponentFid,
+        challengerUsername,
+        challengeId
+    });
 
-    return await sendNotification(tokens, {
+    const tokens = await fetchNotificationTokens(opponentFid);
+    if (!tokens.length) {
+        console.warn('[Challenge Notification] Opponent FID', opponentFid, 'has no notification tokens - they may not have added the frame');
+        return false;
+    }
+
+    const result = await sendNotification(tokens, {
         notificationId: `challenge-${challengeId}-${opponentFid}`,
         title: '🎮 Challenge Received!',
         body: `${formatUsername(challengerUsername)} challenged you to Tap That Mosquito!`,
         targetUrl: `${APP_URL}?challenge=${challengeId}`
     });
+
+    console.log('[Challenge Notification] Result for challenge', challengeId, ':', result ? 'SENT' : 'FAILED');
+    return result;
 }
 
 // Helper: Send accepted notification
 async function sendAcceptedNotification(challengerFid, opponentUsername, challengeId) {
-    const tokens = await fetchNotificationTokens(challengerFid);
-    if (!tokens.length) return;
+    console.log('[Accepted Notification] Sending acceptance notification:', {
+        challengerFid,
+        opponentUsername,
+        challengeId
+    });
 
-    await sendNotification(tokens, {
+    const tokens = await fetchNotificationTokens(challengerFid);
+    if (!tokens.length) {
+        console.warn('[Accepted Notification] Challenger FID', challengerFid, 'has no notification tokens');
+        return;
+    }
+
+    const result = await sendNotification(tokens, {
         notificationId: `accepted-${challengeId}-${challengerFid}`,
         title: '✅ Challenge Accepted!',
         body: `${formatUsername(opponentUsername)} accepted your challenge!`,
         targetUrl: `${APP_URL}?challenge=${challengeId}`
     });
+
+    console.log('[Accepted Notification] Result for challenge', challengeId, ':', result ? 'SENT' : 'FAILED');
 }
 
 // Helper: Send result notification
 async function sendResultNotification(challenge) {
+    console.log('[Result Notification] Sending result notification for challenge:', {
+        id: challenge.id,
+        challengerFid: challenge.challenger_fid,
+        opponentFid: challenge.opponent_fid,
+        challengerScore: challenge.challenger_score,
+        opponentScore: challenge.opponent_score,
+        winnerFid: challenge.winner_fid
+    });
+
     const winnerFid = challenge.winner_fid;
     const loserFid = winnerFid === challenge.challenger_fid
         ? challenge.opponent_fid
@@ -485,36 +560,47 @@ async function sendResultNotification(challenge) {
 
     // Notify winner
     if (winnerFid) {
+        console.log('[Result Notification] Winner FID:', winnerFid, '| Loser FID:', loserFid);
+
         const winnerTokens = await fetchNotificationTokens(winnerFid);
         const winnerScore = winnerFid === challenge.challenger_fid ? challengerScore : opponentScore;
         const loserScoreForWinner = winnerFid === challenge.challenger_fid ? opponentScore : challengerScore;
-        await sendNotification(winnerTokens, {
+
+        const winResult = await sendNotification(winnerTokens, {
             notificationId: `win-${challenge.id}-${winnerFid}`,
             title: '🏆 Victory!',
             body: `You won! ${winnerScore} - ${loserScoreForWinner}`,
             targetUrl: `${APP_URL}?challenge=${challenge.id}`
         });
+        console.log('[Result Notification] Winner notification:', winResult ? 'SENT' : 'FAILED');
 
         // Notify loser
         const loserTokens = await fetchNotificationTokens(loserFid);
         const loserScore = loserFid === challenge.challenger_fid ? challengerScore : opponentScore;
         const winnerScoreForLoser = loserFid === challenge.challenger_fid ? opponentScore : challengerScore;
-        await sendNotification(loserTokens, {
+
+        const loseResult = await sendNotification(loserTokens, {
             notificationId: `loss-${challenge.id}-${loserFid}`,
             title: '😤 Defeated!',
             body: `You lost ${loserScore} - ${winnerScoreForLoser}. Rematch?`,
             targetUrl: `${APP_URL}?challenge=${challenge.id}`
         });
+        console.log('[Result Notification] Loser notification:', loseResult ? 'SENT' : 'FAILED');
     } else {
         // Tie - notify both
+        console.log('[Result Notification] TIE - notifying both players');
+
         for (const fid of [challenge.challenger_fid, challenge.opponent_fid]) {
             const tokens = await fetchNotificationTokens(fid);
-            await sendNotification(tokens, {
+            const tieResult = await sendNotification(tokens, {
                 notificationId: `tie-${challenge.id}-${fid}`,
                 title: '🤝 It\'s a Tie!',
                 body: `Both scored ${challengerScore}! Rematch?`,
                 targetUrl: `${APP_URL}?challenge=${challenge.id}`
             });
+            console.log('[Result Notification] Tie notification to FID', fid, ':', tieResult ? 'SENT' : 'FAILED');
         }
     }
+
+    console.log('[Result Notification] All result notifications processed for challenge', challenge.id);
 }

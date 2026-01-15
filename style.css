@@ -900,6 +900,62 @@ body {
     color: var(--accent);
 }
 
+/* OnchainKit wallet UI */
+.onchainkit-root {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 16px;
+}
+
+.onchainkit-panel {
+    --ock-font-family: 'Press Start 2P', cursive;
+    --ock-primary: var(--primary);
+    --ock-primary-hover: var(--primary-dim);
+    --ock-primary-active: #00b35f;
+    --ock-background: #0f111b;
+    --ock-background-hover: #171a2b;
+    --ock-background-active: #1f2438;
+    --ock-foreground: var(--text);
+    --ock-foreground-muted: var(--text-dim);
+    --ock-radius-default: 18px;
+    --ock-radius-inner: 12px;
+}
+
+#onchainkit-root .onchainkit-connect {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 8px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    padding: 10px 16px;
+    border: 2px solid var(--border);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--text);
+    box-shadow: none;
+    min-width: 0;
+}
+
+#onchainkit-root .onchainkit-connect:hover {
+    border-color: var(--primary);
+    background: rgba(255, 255, 255, 0.06);
+}
+
+#onchainkit-root .onchainkit-connect:active {
+    transform: translateY(1px);
+}
+
+#onchainkit-root .onchainkit-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 4px;
+    border: 2px solid var(--border);
+}
+
+#onchainkit-root .onchainkit-name,
+#onchainkit-root .onchainkit-address {
+    font-size: 8px;
+}
+
 @keyframes pulse-border {
 
     0%,

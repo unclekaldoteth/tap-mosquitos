@@ -58,6 +58,7 @@ contract VersusNFT is ERC721, Ownable, ReentrancyGuard {
     mapping(address => uint256) public totalWins;
     mapping(address => uint256[]) public playerChallenges;
     mapping(address => uint256[]) public playerBattles;
+    mapping(uint256 => uint256) public battleWinStreak;
 
     // Champion NFT tracking (5 wins = can claim)
     mapping(address => bool) public hasClaimedChampion;
@@ -222,6 +223,8 @@ contract VersusNFT is ERC721, Ownable, ReentrancyGuard {
             _battleIdCounter++;
         }
 
+        uint256 winnerStreak = winStreak[winner] + 1;
+
         battles[battleId] = Battle({
             winner: winner,
             loser: loser,
@@ -237,8 +240,9 @@ contract VersusNFT is ERC721, Ownable, ReentrancyGuard {
 
         // Update player stats
         totalWins[winner]++;
-        winStreak[winner]++;
+        winStreak[winner] = winnerStreak;
         winStreak[loser] = 0; // Reset loser's streak
+        battleWinStreak[battleId] = winnerStreak;
 
         playerBattles[winner].push(battleId);
         playerBattles[loser].push(battleId);
@@ -338,7 +342,10 @@ contract VersusNFT is ERC721, Ownable, ReentrancyGuard {
         uint256 battleId = tokenBattleId[tokenId];
         Battle memory battle = battles[battleId];
         
-        uint256 streak = winStreak[battle.winner];
+        uint256 streak = battleWinStreak[battleId];
+        if (streak == 0) {
+            streak = winStreak[battle.winner];
+        }
         string memory title = getVictoryTitle(streak);
         string memory color = getVictoryColor(streak);
         
@@ -462,7 +469,11 @@ contract VersusNFT is ERC721, Ownable, ReentrancyGuard {
         } else {
             uint256 battleId = tokenBattleId[tokenId];
             Battle memory battle = battles[battleId];
-            string memory title = getVictoryTitle(winStreak[battle.winner]);
+            uint256 streak = battleWinStreak[battleId];
+            if (streak == 0) {
+                streak = winStreak[battle.winner];
+            }
+            string memory title = getVictoryTitle(streak);
             
             name = string(abi.encodePacked("Victory #", tokenId.toString()));
             description = string(abi.encodePacked(

@@ -76,6 +76,11 @@ class Game {
         this.acceptChallengeBtn = document.getElementById('accept-challenge-btn');
         this.declineChallengeBtn = document.getElementById('decline-challenge-btn');
         this.enableNotificationsBtn = document.getElementById('enable-notifications-btn');
+        this.notificationsEnabled = false;
+        this.notificationSyncInFlight = false;
+        this.notificationToken = null;
+        this.notificationUrl = null;
+        this.notificationHandlersRegistered = false;
 
         // Wallet status indicator (on start screen)
         this.walletStatus = document.getElementById('wallet-status');
@@ -173,6 +178,7 @@ class Game {
         } catch (e) {
             console.log('SDK ready failed:', e.message);
         }
+        this.registerNotificationHandlers();
 
         this.startBtn.addEventListener('click', () => this.startGame());
         this.restartBtn.addEventListener('click', () => this.restartGame());
@@ -391,6 +397,7 @@ class Game {
                 // Get context which includes user info
                 const context = await sdk.context;
                 console.log('SDK context:', JSON.stringify(context?.user || {}, null, 2));
+                await this.syncNotificationDetailsFromContext(context);
 
                 // Send to backend for Vercel logs (DEBUG - remove after fixing)
                 try {
@@ -661,6 +668,7 @@ class Game {
             const isInMiniApp = await sdk.isInMiniApp();
             if (!isInMiniApp) return null;
             const context = await sdk.context;
+            await this.syncNotificationDetailsFromContext(context);
             if (context?.user?.fid) {
                 this.fid = context.user.fid;
                 if (!this.username) {
@@ -685,6 +693,114 @@ class Game {
         this.challengeStatus.style.color = isError ? '#ff6b6b' : '';
     }
 
+    markNotificationsEnabled() {
+        this.notificationsEnabled = true;
+        if (this.enableNotificationsBtn) {
+            this.enableNotificationsBtn.textContent = '✅ NOTIFICATIONS ENABLED';
+        }
+    }
+
+    async saveNotificationDetails(notificationDetails, source = 'unknown') {
+        if (!notificationDetails?.token || !notificationDetails?.url) {
+            return false;
+        }
+
+        if (this.notificationToken === notificationDetails.token &&
+            this.notificationUrl === notificationDetails.url) {
+            this.markNotificationsEnabled();
+            return true;
+        }
+
+        if (this.notificationSyncInFlight) {
+            return false;
+        }
+
+        this.notificationSyncInFlight = true;
+
+        try {
+            let fid = this.fid || this.authenticatedFid;
+            if (!fid) {
+                try {
+                    const context = await sdk.context;
+                    if (context?.user?.fid) {
+                        fid = context.user.fid;
+                        this.fid = fid;
+                        this.syncChallengeUser();
+                    }
+                } catch (e) {
+                    console.log('Failed to load fid for notifications:', e.message);
+                }
+            }
+
+            if (!fid) {
+                console.log('Skipping notification token save: missing fid.');
+                return false;
+            }
+
+            const response = await fetch('/api/notification-tokens', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    token: notificationDetails.token,
+                    url: notificationDetails.url,
+                    fid
+                })
+            });
+
+            if (!response.ok) {
+                const detail = await response.text();
+                console.log('Failed to save notification token:', detail || response.statusText);
+                return false;
+            }
+
+            this.notificationToken = notificationDetails.token;
+            this.notificationUrl = notificationDetails.url;
+            this.markNotificationsEnabled();
+            return true;
+        } catch (e) {
+            console.log('Failed to save notification token:', e.message);
+            return false;
+        } finally {
+            this.notificationSyncInFlight = false;
+        }
+    }
+
+    async syncNotificationDetailsFromContext(context) {
+        const details = context?.client?.notificationDetails;
+        if (!details?.token || !details?.url) return false;
+        return await this.saveNotificationDetails(details, 'context');
+    }
+
+    registerNotificationHandlers() {
+        if (this.notificationHandlersRegistered) return;
+        if (typeof sdk?.on !== 'function') return;
+        this.notificationHandlersRegistered = true;
+
+        sdk.on('miniAppAdded', async ({ notificationDetails }) => {
+            if (!notificationDetails) return;
+            const saved = await this.saveNotificationDetails(notificationDetails, 'miniAppAdded');
+            if (saved) {
+                this.setChallengeStatus('Ready for battle! Alerts enabled.', false);
+            }
+        });
+
+        sdk.on('notificationsEnabled', async ({ notificationDetails }) => {
+            const saved = await this.saveNotificationDetails(notificationDetails, 'notificationsEnabled');
+            if (saved) {
+                this.setChallengeStatus('Ready for battle! Alerts enabled.', false);
+            }
+        });
+
+        sdk.on('notificationsDisabled', () => {
+            this.notificationsEnabled = false;
+            this.notificationToken = null;
+            this.notificationUrl = null;
+            if (this.enableNotificationsBtn) {
+                this.enableNotificationsBtn.textContent = '🔔 ENABLE NOTIFICATIONS';
+            }
+        });
+    }
+
     async enableNotifications() {
         if (!this.enableNotificationsBtn) return;
         this.enableNotificationsBtn.disabled = true;
@@ -692,7 +808,7 @@ class Game {
         this.enableNotificationsBtn.textContent = '⏳ ENABLING...';
         try {
             const saved = await this.addFrame();
-            if (saved) {
+            if (saved || this.notificationsEnabled) {
                 this.enableNotificationsBtn.textContent = '✅ NOTIFICATIONS ENABLED';
                 this.setChallengeStatus('Ready for battle! Alerts enabled.', false);
             } else {

@@ -105,6 +105,13 @@ export const VERSUS_NFT_ABI = [
         type: "function"
     },
     {
+        inputs: [{ name: "battleId", type: "uint256" }],
+        name: "battleWinStreak",
+        outputs: [{ name: "", type: "uint256" }],
+        stateMutability: "view",
+        type: "function"
+    },
+    {
         inputs: [],
         name: "totalSupply",
         outputs: [{ name: "", type: "uint256" }],
@@ -156,7 +163,7 @@ export const ChallengeStatus = {
 
 // Contract addresses (deployed)
 export const VERSUS_CONTRACT_ADDRESSES = {
-    mainnet: "0x0cb3B5B40491F9c1b5f62Eb1094eF4BAE518a464",
+    mainnet: "0x58fA308a7AE80A1bAe56b33183C78B7de092BBf6",
     sepolia: "0x0F48Fd7aAC0A3e4FE75029b618b32a66266666B5"
 };
 

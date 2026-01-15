@@ -142,7 +142,10 @@ tap-that-mosquito/
 | Contract | Base Mainnet | Base Sepolia |
 |---------|--------------|--------------|
 | MosquitoSlayerNFT | `0xB7f6D7456837555D7A983f95982cBdb34F102897` | `0x0cb3B5B40491F9c1b5f62Eb1094eF4BAE518a464` |
-| VersusNFT | `0x0cb3B5B40491F9c1b5f62Eb1094eF4BAE518a464` | `0x0F48Fd7aAC0A3e4FE75029b618b32a66266666B5` |
+| VersusNFT | `0x58fA308a7AE80A1bAe56b33183C78B7de092BBf6` | `0x0F48Fd7aAC0A3e4FE75029b618b32a66266666B5` |
+
+### Deployment Notes
+- 2026-01-16: VersusNFT redeployed on Base mainnet to snapshot win streak per battle (`battleWinStreak`). New address: `0x58fA308a7AE80A1bAe56b33183C78B7de092BBf6`.
 
 ---
 

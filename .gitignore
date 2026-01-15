@@ -9,4 +9,12 @@ cache
 artifacts
 *.log
 .DS_Store
-node_modules
+
+# Backend automation folder - NEVER COMMIT
+backend/
+
+# Boost activity files - NEVER COMMIT
+scripts/.keys.local
+scripts/_wallets.json
+scripts/_boost-progress.json
+scripts/_boost.pid

@@ -14,6 +14,7 @@ import { challengeManager } from './challengeManager.js';
 import { shareManager } from './shareManager.js';
 import { referralManager } from './referralManager.js';
 import { sponsorManager } from './sponsorManager.js';
+import { getBaseAccountProvider } from './baseAccount.js';
 
 class Game {
     constructor() {
@@ -116,6 +117,7 @@ class Game {
         this.username = null; // Farcaster username
         this.fid = null;
         this.isConnecting = false;
+        this.walletProvider = null;
 
         // Versus mode state
         this.isVersusMode = false;
@@ -229,6 +231,7 @@ class Game {
         if (this.declineChallengeBtn) {
             this.declineChallengeBtn.addEventListener('click', () => this.declineActiveChallenge());
         }
+        window.addEventListener('onchainkit:account', (event) => this.handleOnchainKitAccount(event));
 
         // Wallet status click handler (on start screen)
         this.walletStatus.addEventListener('click', () => this.handleWalletClick());
@@ -466,6 +469,7 @@ class Game {
                             this.fid = context.user.fid;
                         }
                         let address = context?.user?.wallet?.address || context?.user?.connectedAddress || null;
+                        let quickAuthProvider = null;
 
                         // Preserve existing username if context doesn't have one
                         const contextUsername = context?.user?.username || context?.user?.displayName || null;
@@ -476,9 +480,9 @@ class Game {
 
                         if (!this.isValidAddress(address)) {
                             try {
-                                const provider = await sdk.wallet.getEthereumProvider();
-                                if (provider?.request) {
-                                    const accounts = await provider.request({ method: 'eth_requestAccounts' });
+                                quickAuthProvider = await sdk.wallet.getEthereumProvider();
+                                if (quickAuthProvider?.request) {
+                                    const accounts = await quickAuthProvider.request({ method: 'eth_requestAccounts' });
                                     address = accounts?.[0] || null;
                                 }
                             } catch (providerError) {
@@ -487,13 +491,35 @@ class Game {
                         }
 
                         if (this.isValidAddress(address)) {
+                            if (!this.walletProvider && quickAuthProvider) {
+                                this.setWalletProvider(quickAuthProvider);
+                            }
                             this.setWalletConnected(address, username);
                             connected = true;
                         }
                     }
                 }
             } catch (sdkError) {
-                console.log('Quick Auth not available, trying MetaMask...', sdkError.message);
+                console.log('Quick Auth not available, trying Base Account/MetaMask...', sdkError.message);
+            }
+
+            // Try Base Account SDK
+            if (!connected) {
+                try {
+                    const baseProvider = await getBaseAccountProvider();
+                    if (baseProvider?.request) {
+                        const accounts = await baseProvider.request({ method: 'eth_requestAccounts' });
+                        const address = accounts?.[0] || null;
+                        if (this.isValidAddress(address)) {
+                            const username = await this.fetchFarcasterUsername(address);
+                            this.setWalletProvider(baseProvider);
+                            this.setWalletConnected(address, username);
+                            connected = true;
+                        }
+                    }
+                } catch (baseError) {
+                    console.log('Base Account connection failed:', baseError?.message || baseError);
+                }
             }
 
             // Fallback to MetaMask/window.ethereum
@@ -508,6 +534,7 @@ class Game {
                         const address = accounts[0];
                         // Try to get Farcaster username for this address
                         const username = await this.fetchFarcasterUsername(address);
+                        this.setWalletProvider(window.ethereum);
                         this.setWalletConnected(address, username);
                         connected = true;
                     }
@@ -584,6 +611,41 @@ class Game {
 
         this.syncChallengeUser();
         this.refreshPendingChallenges();
+    }
+
+    setWalletDisconnected() {
+        this.walletAddress = null;
+        this.username = null;
+        this.walletProvider = null;
+        this.authToken = null;
+        this.walletBtn.classList.remove('connected');
+        this.walletText.textContent = '🔗';
+        this.walletBtn.title = 'Connect Wallet';
+        this.walletStatus.classList.remove('connected');
+        this.walletStatus.classList.add('disconnected');
+        this.walletStatusIcon.textContent = '🔗';
+        this.walletStatusText.textContent = 'Connect Wallet';
+        this.gameContent.classList.add('hidden');
+    }
+
+    handleOnchainKitAccount(event) {
+        const detail = event?.detail || {};
+        if (detail.isConnected && this.isValidAddress(detail.address)) {
+            this.setWalletConnected(detail.address, this.username);
+            return;
+        }
+
+        if (!detail.isConnected && this.walletAddress) {
+            this.setWalletDisconnected();
+        }
+    }
+
+    setWalletProvider(provider) {
+        if (!provider?.request) return;
+        this.walletProvider = provider;
+        if (typeof window !== 'undefined') {
+            window.__walletProvider = provider;
+        }
     }
 
     // Get display name (username or formatted address)
@@ -995,14 +1057,23 @@ class Game {
         }
 
         let rawProvider = null;
-        try {
-            rawProvider = await sdk.wallet.getEthereumProvider();
-        } catch (sdkError) {
-            console.log('Sponsor provider not available via SDK:', sdkError.message);
+        if (this.walletProvider?.request) {
+            rawProvider = this.walletProvider;
+        }
+        if (!rawProvider) {
+            try {
+                rawProvider = await sdk.wallet.getEthereumProvider();
+            } catch (sdkError) {
+                console.log('Sponsor provider not available via SDK:', sdkError.message);
+            }
         }
 
         if (!rawProvider && typeof window !== 'undefined' && window.ethereum) {
             rawProvider = window.ethereum;
+        }
+
+        if (!rawProvider) {
+            rawProvider = await getBaseAccountProvider();
         }
 
         if (!rawProvider) {
@@ -2356,6 +2427,14 @@ Can you beat my score?`;
     async updateMintButton() {
         if (!this.walletAddress || !nftMinter.isAvailable()) {
             this.mintBtn.classList.add('hidden');
+            window.dispatchEvent(new CustomEvent('game:mint-availability', {
+                detail: {
+                    score: this.score,
+                    tier: null,
+                    label: 'MINT UNAVAILABLE',
+                    canMint: false
+                }
+            }));
             return;
         }
 
@@ -2373,6 +2452,14 @@ Can you beat my score?`;
                 const bestTierInfo = nftMinter.getTierInfo(bestTier);
                 this.mintBtn.textContent = `✅ ${bestTierInfo.name.toUpperCase()} MINTED`;
                 this.mintBtn.disabled = true;
+                window.dispatchEvent(new CustomEvent('game:mint-availability', {
+                    detail: {
+                        score: this.score,
+                        tier: bestTier,
+                        label: this.mintBtn.textContent,
+                        canMint: false
+                    }
+                }));
                 return;
             }
 
@@ -2387,6 +2474,14 @@ Can you beat my score?`;
 
         // Show mint button with tier info
         this.mintBtn.textContent = `🎖️ MINT ${tierInfo.name.toUpperCase()}`;
+        window.dispatchEvent(new CustomEvent('game:mint-availability', {
+            detail: {
+                score: this.score,
+                tier: tierToShow,
+                label: this.mintBtn.textContent,
+                canMint: true
+            }
+        }));
     }
 
     // ============================================

@@ -94,6 +94,8 @@ tap-that-mosquito/
 ├── api/                         # Serverless endpoints (signing, leaderboard, notifications)
 ├── game.js                      # Main game logic
 ├── nftMinter.js                 # NFT minting integration
+├── onchainkit.jsx               # OnchainKit wallet + transaction UI
+├── baseAccount.js               # Base Account SDK provider
 ├── versusContract.js            # Versus mode integration
 ├── leaderboard.js               # Score tracking
 ├── sponsorManager.js            # Prize pool + sponsor tiers
@@ -275,6 +277,8 @@ NEYNAR_API_KEY=...
 ### Integration
 - Farcaster Mini App SDK
 - Base Mainnet
+- OnchainKit (wallet UI, transactions, identity)
+- Base Account SDK (smart wallet connection)
 
 ---
 
@@ -350,6 +354,10 @@ NEYNAR_API_KEY=...
 - [x] Improved NFT minting with on-chain tier checks
 - [x] Wallet provider improvements with timeout handling
 - [x] Paymaster-sponsored minting with `wallet_sendCalls` fallback
+- [x] OnchainKit wallet and transaction components
+- [x] Base Account SDK integration for seamless wallet connection
+- [x] Identity card display for connected players
+- [x] Unified wallet provider management across game and minter
 - [ ] Daily Jackpot mode with ETH entry fees
 - [ ] Streak NFTs for consecutive play
 - [ ] Sponsor Bounty Board

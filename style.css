@@ -907,6 +907,13 @@ body {
     margin-bottom: 16px;
 }
 
+.onchainkit-shell {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+
 .onchainkit-panel {
     --ock-font-family: 'Press Start 2P', cursive;
     --ock-primary: var(--primary);
@@ -919,6 +926,39 @@ body {
     --ock-foreground-muted: var(--text-dim);
     --ock-radius-default: 18px;
     --ock-radius-inner: 12px;
+}
+
+.onchainkit-card {
+    width: min(320px, 92vw);
+    border: 2px solid var(--border);
+    border-radius: 18px;
+    padding: 12px 14px;
+    background: rgba(15, 17, 27, 0.9);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.onchainkit-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 7px;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+}
+
+.onchainkit-card-title {
+    color: var(--text-dim);
+}
+
+.onchainkit-card-tier {
+    color: var(--primary);
+}
+
+#onchainkit-root .onchainkit-identity-card {
+    font-family: 'Press Start 2P', cursive;
+    font-size: 8px;
 }
 
 #onchainkit-root .onchainkit-connect {

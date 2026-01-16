@@ -7,6 +7,7 @@
 import { ethers } from 'ethers';
 import { sdk } from '@farcaster/miniapp-sdk';
 import { MOSQUITO_NFT_ABI, CONTRACT_ADDRESSES, TIER_INFO, Tier, getTierFromScore } from './contract.js';
+import { getBaseAccountProvider } from './baseAccount.js';
 
 const withTimeout = (promise, ms, message) => {
     let timeoutId;
@@ -58,14 +59,20 @@ class NFTMinter {
         if (this.rawProvider) return this.rawProvider;
 
         let rawProvider = null;
-        try {
-            rawProvider = await withTimeout(
-                sdk.wallet.getEthereumProvider(),
-                4000,
-                'Provider lookup timed out'
-            );
-        } catch (sdkError) {
-            console.log('SDK provider not available:', sdkError.message);
+        if (typeof window !== 'undefined' && window.__walletProvider) {
+            rawProvider = window.__walletProvider;
+        }
+
+        if (!rawProvider) {
+            try {
+                rawProvider = await withTimeout(
+                    sdk.wallet.getEthereumProvider(),
+                    4000,
+                    'Provider lookup timed out'
+                );
+            } catch (sdkError) {
+                console.log('SDK provider not available:', sdkError.message);
+            }
         }
 
         if (!rawProvider && sdk.wallet?.ethProvider) {
@@ -75,6 +82,13 @@ class NFTMinter {
         if (!rawProvider && typeof window !== 'undefined' && window.ethereum) {
             rawProvider = window.ethereum;
             console.log('Using window.ethereum as provider');
+        }
+
+        if (!rawProvider) {
+            rawProvider = await getBaseAccountProvider();
+            if (rawProvider) {
+                console.log('Using Base Account provider');
+            }
         }
 
         this.rawProvider = rawProvider;

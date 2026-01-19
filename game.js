@@ -15,6 +15,10 @@ import { shareManager } from './shareManager.js';
 import { referralManager } from './referralManager.js';
 import { sponsorManager } from './sponsorManager.js';
 import { getBaseAccountProvider } from './baseAccount.js';
+import { gamePassManager, MINT_PRICE_ETH } from './gamePassManager.js';
+
+// Expose for React/OnchainKit
+window.gamePassManager = gamePassManager;
 
 class Game {
     constructor() {
@@ -98,6 +102,13 @@ class Game {
         this.closeSponsorModal = document.getElementById('close-sponsor-modal');
         this.sponsorStatus = document.getElementById('sponsor-status');
         this.tierBtns = document.querySelectorAll('.tier-btn');
+
+        // Game Pass P2W elements
+        this.gamepassSection = document.getElementById('gamepass-section');
+        this.prizePoolAmount = document.getElementById('prize-pool-amount');
+        this.gamepassBadge = document.getElementById('gamepass-badge');
+        this.mintGamepassBtn = document.getElementById('mint-gamepass-btn');
+        this.hasGamePass = false;
 
         this.achievementName = document.getElementById('achievement-name');
         this.rankDisplay = document.getElementById('rank-display');
@@ -260,6 +271,11 @@ class Game {
         // Load sponsors on init
         this.loadSponsors();
 
+        // Game Pass P2W event listener
+        if (this.mintGamepassBtn) {
+            this.mintGamepassBtn.addEventListener('click', () => this.handleGamePassMint());
+        }
+
         // Fetch global leaderboard
         await leaderboard.fetchGlobal();
 
@@ -387,6 +403,155 @@ class Game {
             }).join('');
         } catch (error) {
             console.log('Failed to load sponsors:', error.message);
+        }
+    }
+
+    // ============ Game Pass P2W Methods ============
+
+    async updateGamePassStatus() {
+        if (!this.walletAddress) return;
+
+        try {
+            // Initialize manager if needed
+            await gamePassManager.init();
+
+            // Check if player has a Game Pass
+            this.hasGamePass = await gamePassManager.hasGamePass(this.walletAddress);
+
+            // Update badge
+            if (this.gamepassBadge) {
+                if (this.hasGamePass) {
+                    this.gamepassBadge.innerHTML = '★ PREMIUM';
+                    this.gamepassBadge.classList.remove('no-pass');
+                    this.gamepassBadge.classList.add('active');
+                } else {
+                    this.gamepassBadge.innerHTML = '❌ No Game Pass';
+                    this.gamepassBadge.classList.add('no-pass');
+                    this.gamepassBadge.classList.remove('active');
+                }
+            }
+
+            // Update mint button
+            if (this.mintGamepassBtn) {
+                this.mintGamepassBtn.classList.remove('loading');
+                if (this.hasGamePass) {
+                    this.mintGamepassBtn.classList.add('owned');
+                    this.mintGamepassBtn.innerHTML = `
+                        <span class="mint-icon">✅</span>
+                        <span class="mint-text">GAME PASS OWNED</span>
+                        <span class="mint-price">Prize Eligible</span>
+                    `;
+                } else {
+                    this.mintGamepassBtn.classList.remove('owned');
+                    this.mintGamepassBtn.innerHTML = `
+                        <span class="mint-icon">🎮</span>
+                        <span class="mint-text">GET GAME PASS</span>
+                        <span class="mint-price">${MINT_PRICE_ETH} ETH</span>
+                    `;
+                }
+            }
+
+            // Update prize pool display
+            const prizePool = await gamePassManager.getPrizePool();
+            if (this.prizePoolAmount) {
+                this.prizePoolAmount.textContent = `${prizePool} ETH`;
+            }
+
+        } catch (error) {
+            console.log('Failed to update Game Pass status:', error.message);
+        }
+    }
+
+    async handleGamePassMint() {
+        if (!this.walletAddress) {
+            alert('Please connect wallet first!');
+            return;
+        }
+
+        if (this.hasGamePass) {
+            // Already has pass
+            return;
+        }
+
+        if (!this.mintGamepassBtn) return;
+
+        try {
+            // Show loading state
+            this.mintGamepassBtn.classList.add('loading');
+            this.mintGamepassBtn.innerHTML = `
+                <span class="mint-icon">⏳</span>
+                <span class="mint-text">MINTING...</span>
+                <span class="mint-price">Please confirm</span>
+            `;
+
+            // First, make sure we have a provider and set it for gamePassManager
+            if (this.walletProvider) {
+                gamePassManager.setProvider(this.walletProvider);
+            }
+
+            // Ensure correct chain FIRST (this will prompt wallet to switch if needed)
+            const onCorrectChain = await gamePassManager.ensureCorrectChain();
+            if (!onCorrectChain) {
+                throw new Error('Please switch to Base Sepolia network');
+            }
+
+            // Now initialize after chain is correct
+            const initialized = await gamePassManager.init();
+            if (!initialized || !gamePassManager.isAvailable()) {
+                throw new Error('Game Pass contract not available.');
+            }
+
+            // Connect signer for transactions
+            await gamePassManager.connectSigner();
+
+            // Check for referral
+            const urlParams = new URLSearchParams(window.location.search);
+            const referrer = urlParams.get('ref') || referralManager.getStats().referredBy;
+
+            let result;
+            const referrerAddress = await this.resolveReferrerAddress(referrer);
+            if (referrerAddress && referrerAddress.toLowerCase() !== this.walletAddress.toLowerCase()) {
+                result = await gamePassManager.mintWithReferral(referrerAddress);
+            } else {
+                result = await gamePassManager.mintGamePass();
+            }
+
+            console.log('[GamePass] Mint result:', result);
+
+            // Update status
+            this.hasGamePass = true;
+            this.updateGamePassStatus();
+
+            // Play success sound if available
+            if (soundManager?.playStart) soundManager.playStart();
+
+        } catch (error) {
+            console.error('[GamePass] Mint failed:', error);
+
+            // Extract readable error message
+            let errorMsg = 'Try again';
+            if (error?.message) {
+                if (error.message.includes('insufficient funds')) {
+                    errorMsg = 'Insufficient ETH';
+                } else if (error.message.includes('user rejected') || error.message.includes('User denied')) {
+                    errorMsg = 'Rejected by user';
+                } else if (error.message.includes('network')) {
+                    errorMsg = 'Wrong network';
+                } else if (error.message.includes('not available')) {
+                    errorMsg = 'Contract unavailable';
+                } else {
+                    errorMsg = error.message.slice(0, 25);
+                }
+            }
+
+            this.mintGamepassBtn.classList.remove('loading');
+            this.mintGamepassBtn.innerHTML = `
+                <span class="mint-icon">❌</span>
+                <span class="mint-text">MINT FAILED</span>
+                <span class="mint-price">${errorMsg}</span>
+            `;
+
+            setTimeout(() => this.updateGamePassStatus(), 3000);
         }
     }
 
@@ -592,6 +757,12 @@ class Game {
         // Show game content (buttons, sponsor wall) after wallet connected
         this.gameContent.classList.remove('hidden');
 
+        // Show Game Pass section and check status
+        if (this.gamepassSection) {
+            this.gamepassSection.classList.remove('hidden');
+            this.updateGamePassStatus();
+        }
+
         // Initialize sponsor manager after wallet connection
         this.initSponsorManager()
             .then((initialized) => {
@@ -626,6 +797,24 @@ class Game {
         this.walletStatusIcon.textContent = '🔗';
         this.walletStatusText.textContent = 'Connect Wallet';
         this.gameContent.classList.add('hidden');
+
+        this.hasGamePass = false;
+        if (this.gamepassSection) {
+            this.gamepassSection.classList.add('hidden');
+        }
+        if (this.gamepassBadge) {
+            this.gamepassBadge.textContent = '❌ No Game Pass';
+            this.gamepassBadge.classList.add('no-pass');
+            this.gamepassBadge.classList.remove('has-pass');
+        }
+        if (this.mintGamepassBtn) {
+            this.mintGamepassBtn.classList.remove('owned', 'loading');
+            this.mintGamepassBtn.innerHTML = `
+                <span class="mint-icon">🎮</span>
+                <span class="mint-text">GET GAME PASS</span>
+                <span class="mint-price">${MINT_PRICE_ETH} ETH</span>
+            `;
+        }
     }
 
     handleOnchainKitAccount(event) {
@@ -646,6 +835,8 @@ class Game {
         if (typeof window !== 'undefined') {
             window.__walletProvider = provider;
         }
+        // Also set provider for GamePass manager
+        gamePassManager.setProvider(provider);
     }
 
     // Get display name (username or formatted address)
@@ -678,6 +869,86 @@ class Game {
             console.log('Farcaster lookup skipped:', error.message);
         }
         return null;
+    }
+
+    getVerifiedAddressFromUser(user) {
+        const verified = user?.verified_addresses || user?.verifiedAddresses;
+        const ethAddresses = verified?.eth_addresses || verified?.ethAddresses;
+        if (Array.isArray(ethAddresses)) {
+            for (const address of ethAddresses) {
+                if (ethers.isAddress(address)) {
+                    return address;
+                }
+            }
+        }
+
+        const custody = user?.custody_address || user?.custodyAddress;
+        if (ethers.isAddress(custody)) {
+            return custody;
+        }
+
+        return null;
+    }
+
+    async fetchFarcasterAddress(username) {
+        const apiKey = import.meta.env.VITE_NEYNAR_API_KEY || 'NEYNAR_API_DOCS';
+        if (!apiKey) return null;
+
+        const normalized = username?.replace(/^@/, '').trim();
+        if (!normalized) return null;
+
+        const candidates = [normalized];
+        if (normalized.endsWith('.eth')) {
+            candidates.push(normalized.replace(/\.eth$/i, ''));
+        } else if (!normalized.includes('.')) {
+            candidates.push(`${normalized}.eth`);
+        }
+
+        for (const candidate of candidates) {
+            const directUrls = [
+                `https://api.neynar.com/v2/farcaster/user/by_username?username=${encodeURIComponent(candidate)}`,
+                `https://api.neynar.com/v2/farcaster/user/by-username?username=${encodeURIComponent(candidate)}`
+            ];
+
+            for (const url of directUrls) {
+                try {
+                    const response = await fetch(url, { headers: { 'api_key': apiKey } });
+                    if (!response.ok) continue;
+                    const data = await response.json();
+                    const user = data?.user || data?.result?.user;
+                    const address = this.getVerifiedAddressFromUser(user);
+                    if (address) return address;
+                } catch {
+                    continue;
+                }
+            }
+
+            try {
+                const response = await fetch(
+                    `https://api.neynar.com/v2/farcaster/user/search?q=${encodeURIComponent(candidate)}&limit=5`,
+                    { headers: { 'api_key': apiKey } }
+                );
+                if (!response.ok) continue;
+                const data = await response.json();
+                const users = data?.result?.users || [];
+                for (const user of users) {
+                    const address = this.getVerifiedAddressFromUser(user);
+                    if (address) return address;
+                }
+            } catch {
+                continue;
+            }
+        }
+
+        return null;
+    }
+
+    async resolveReferrerAddress(referrer) {
+        if (!referrer) return null;
+        const normalized = referrer.replace(/^@/, '').trim();
+        if (!normalized) return null;
+        if (ethers.isAddress(normalized)) return normalized;
+        return await this.fetchFarcasterAddress(normalized);
     }
 
     formatAddress(address) {
@@ -2687,6 +2958,11 @@ Can you beat my score?`;
         clearTimeout(this.spawnInterval);
         clearTimeout(this.comboTimeout);
 
+        this.submitVersusScore()
+            .catch((error) => {
+                console.log('Failed to submit versus score:', error.message);
+            });
+
         // Clear remaining mosquitoes
         this.mosquitoes.forEach(data => {
             if (data.element.parentNode) {
@@ -2720,6 +2996,14 @@ Can you beat my score?`;
 
         // Update versus result screen
         this.showVersusResult();
+    }
+
+    async submitVersusScore() {
+        if (!this.currentChallengeId) return;
+        const fid = await this.ensureFarcasterContext();
+        if (!fid) return;
+        this.syncChallengeUser();
+        await challengeManager.submitScore(this.currentChallengeId, this.score);
     }
 
     showVersusResult() {
